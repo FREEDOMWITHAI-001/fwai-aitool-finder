@@ -1,0 +1,31 @@
+{
+  "name": "ai-tool-finder",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FREEDOMWITHAI-001/fwai-aitool-finder.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/FREEDOMWITHAI-001/fwai-aitool-finder/issues"
+  },
+  "homepage": "https://github.com/FREEDOMWITHAI-001/fwai-aitool-finder#readme",
+  "dependencies": {
+    "firebase": "^12.10.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.4",
+    "vite": "^7.3.1"
+  }
+}
