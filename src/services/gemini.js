@@ -15,7 +15,18 @@ function buildPrompt(userQuery, { role = '', budget = '', teamSize = '', exclude
     excludeClause = `\n\nIMPORTANT: Do NOT recommend these tools (already shown): ${excludeTools.join(', ')}. Recommend 3 DIFFERENT tools.`;
   }
 
-  return `You are an AI tool recommendation expert. A user will describe their use case, and you must recommend exactly 3 AI tools that best fit their needs.
+  const currentDate = new Date().toISOString().split('T')[0];
+
+  return `You are an AI tool recommendation expert with knowledge of the LATEST AI tools as of ${currentDate}. A user will describe their use case, and you must recommend exactly 3 AI tools that best fit their needs.
+
+CRITICAL: You must recommend the tools that are CURRENTLY the best in the market RIGHT NOW, not tools that were popular 2 years ago. The AI tool landscape changes rapidly. For example:
+- For AI coding: Cursor, Claude Code, Windsurf, Cline, Aider, and Continue are leading in 2025-2026, NOT just GitHub Copilot
+- For AI chat: Claude, ChatGPT, Gemini, Perplexity are the current leaders
+- For AI image generation: Midjourney, DALL-E 3, Flux, Ideogram, Leonardo AI are current
+- For AI video: Sora, Runway Gen-3, Kling, Pika are current
+- For AI writing: Claude, Jasper, Copy.ai, Writesonic are current
+- For AI search: Perplexity, You.com, Phind are current
+Always consider the NEWEST entrants and recent major updates, not just legacy tools.
 
 For each tool, provide:
 1. "name": The official tool name
@@ -46,9 +57,7 @@ Respond with a JSON object in this exact format:
 
 Important rules:
 - Recommend exactly 3 tools, ranked by relevance to the use case
-- Rank by actual technical capability and relevance, not by popularity or number of reviews alone
-- Include actively maintained tools that have had significant updates in 2024-2025. Do NOT exclude major current tools (like Claude, ChatGPT, Cursor, etc.) — but also surface lesser-known gems alongside them
-- Do NOT recommend outdated or abandoned tools just because they were once popular
+- ALWAYS recommend the CURRENT best tools, not legacy/older ones. If a newer tool has surpassed an older one, recommend the newer one.
 - Only recommend real, currently active tools with valid URLs
 - Ratings must be sourced from real review platforms (G2, Capterra, Product Hunt, TrustRadius, or Trustpilot)
 - The "reason" field must be personalized to the user's specific use case, not generic
