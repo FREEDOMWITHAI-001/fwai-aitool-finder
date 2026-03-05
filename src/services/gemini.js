@@ -46,6 +46,9 @@ Respond with a JSON object in this exact format:
 
 Important rules:
 - Recommend exactly 3 tools, ranked by relevance to the use case
+- Rank by actual technical capability and relevance, not by popularity or number of reviews alone
+- Include actively maintained tools that have had significant updates in 2024-2025. Do NOT exclude major current tools (like Claude, ChatGPT, Cursor, etc.) — but also surface lesser-known gems alongside them
+- Do NOT recommend outdated or abandoned tools just because they were once popular
 - Only recommend real, currently active tools with valid URLs
 - Ratings must be sourced from real review platforms (G2, Capterra, Product Hunt, TrustRadius, or Trustpilot)
 - The "reason" field must be personalized to the user's specific use case, not generic
