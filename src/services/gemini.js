@@ -151,6 +151,9 @@ async function geminiCall(promptText) {
         temperature: 0.7,
         maxOutputTokens: 4096,
       },
+      tools: [{
+        google_search: {}
+      }],
     }),
   });
 
