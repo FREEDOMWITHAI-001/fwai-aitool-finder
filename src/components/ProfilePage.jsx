@@ -30,7 +30,13 @@ export default function ProfilePage({ userEmail, userRole, uid, onRoleUpdate, on
 
   return (
     <div className="profile-page">
-      <button className="back-btn" onClick={onBack}>{'\u2190'} Back</button>
+      <button className="back-btn" onClick={onBack}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12" />
+          <polyline points="12 19 5 12 12 5" />
+        </svg>
+        Back
+      </button>
       <div className="profile-card">
         <h2 className="profile-title">Profile</h2>
 

@@ -1,7 +1,6 @@
 export default function ComparisonModal({ data, tools, onClose }) {
   if (!data) return null;
 
-  // Lookup original tool data for URLs, ratings, bestFor
   const toolMap = {};
   if (tools) {
     for (const t of tools) {
@@ -14,7 +13,12 @@ export default function ComparisonModal({ data, tools, onClose }) {
       <div className="comparison-modal" onClick={e => e.stopPropagation()}>
         <div className="comparison-header">
           <h2>Compare Tools</h2>
-          <button className="comparison-close" onClick={onClose}>{'\u2715'}</button>
+          <button className="comparison-close" onClick={onClose}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
 
         <div className="comparison-grid">
@@ -23,7 +27,13 @@ export default function ComparisonModal({ data, tools, onClose }) {
             return (
               <div key={item.tool} className={`comparison-col ${item.tool === data.winner ? 'winner' : ''}`}>
                 <h3 className="comparison-tool-name">
-                  {item.tool === data.winner && <span className="winner-badge">{'\uD83C\uDFC6'}</span>}
+                  {item.tool === data.winner && (
+                    <span className="winner-badge">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                      </svg>
+                    </span>
+                  )}
                   {item.tool}
                 </h3>
 
@@ -62,7 +72,11 @@ export default function ComparisonModal({ data, tools, onClose }) {
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Open Tool {'\u2192'}
+                    Open Tool
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="7" y1="17" x2="17" y2="7" />
+                      <polyline points="7 7 17 7 17 17" />
+                    </svg>
                   </a>
                 )}
               </div>
@@ -72,9 +86,13 @@ export default function ComparisonModal({ data, tools, onClose }) {
 
         {data.winner && (
           <div className="comparison-winner">
-            <span className="winner-icon">{'\uD83C\uDFC6'}</span>
+            <span className="winner-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+              </svg>
+            </span>
             <strong>Winner: {data.winner}</strong>
-            <span className="winner-reason">{'\u2014'} {data.winnerReason}</span>
+            <span className="winner-reason">&mdash; {data.winnerReason}</span>
           </div>
         )}
       </div>

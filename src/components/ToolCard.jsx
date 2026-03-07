@@ -6,7 +6,7 @@ function renderStars(rating) {
     if (i < full || (i === full && hasHalf)) {
       stars.push(<span key={i} className="star filled">{'\u2605'}</span>);
     } else {
-      stars.push(<span key={i} className="star empty">{'\u2606'}</span>);
+      stars.push(<span key={i} className="star empty">{'\u2605'}</span>);
     }
   }
   return stars;
@@ -16,7 +16,7 @@ export default function ToolCard({ tool, index, isBookmarked, onToggleBookmark, 
   const pricingClass = tool.pricing.toLowerCase();
 
   return (
-    <div className={`tool-card fade-in ${isSelected ? 'selected-for-compare' : ''}`} style={{ animationDelay: `${index * 0.15}s` }}>
+    <div className={`tool-card fade-in ${isSelected ? 'selected-for-compare' : ''}`} style={{ animationDelay: `${index * 0.1}s` }}>
       <div className="tool-number">{String(index + 1).padStart(2, '0')}</div>
       <div className="tool-info">
         <div className="tool-header">
@@ -32,14 +32,25 @@ export default function ToolCard({ tool, index, isBookmarked, onToggleBookmark, 
                 onClick={() => onToggleCompare?.(tool)}
                 title={isSelected ? 'Remove from comparison' : 'Add to comparison'}
               >
-                {isSelected ? '\u2611' : '\u2610'}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {isSelected ? (
+                    <>
+                      <polyline points="9 11 12 14 22 4" />
+                      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                    </>
+                  ) : (
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  )}
+                </svg>
               </button>
               <button
                 className={`bookmark-toggle ${isBookmarked ? 'active' : ''}`}
                 onClick={() => onToggleBookmark?.(tool)}
                 title={isBookmarked ? 'Remove bookmark' : 'Save tool'}
               >
-                {isBookmarked ? '\u2605' : '\u2606'}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill={isBookmarked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                </svg>
               </button>
             </div>
           </div>
@@ -61,7 +72,11 @@ export default function ToolCard({ tool, index, isBookmarked, onToggleBookmark, 
           target="_blank"
           rel="noopener noreferrer"
         >
-          Open Tool {'\u2192'}
+          Open Tool
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="7" y1="17" x2="17" y2="7" />
+            <polyline points="7 7 17 7 17 17" />
+          </svg>
         </a>
       </div>
     </div>

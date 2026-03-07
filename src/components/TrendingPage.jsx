@@ -15,7 +15,13 @@ export default function TrendingPage({ onSearchQuery, onBack }) {
   if (loading) {
     return (
       <div className="trending-page">
-        <button className="back-btn" onClick={onBack}>{'\u2190'} Back</button>
+        <button className="back-btn" onClick={onBack}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+          Back
+        </button>
         <h2 className="page-title">Trending</h2>
         <p className="loading-text">Loading trends...</p>
       </div>
@@ -26,8 +32,22 @@ export default function TrendingPage({ onSearchQuery, onBack }) {
 
   return (
     <div className="trending-page">
-      <button className="back-btn" onClick={onBack}>{'\u2190'} Back</button>
-      <h2 className="page-title">{'\uD83D\uDD25'} Trending</h2>
+      <button className="back-btn" onClick={onBack}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12" />
+          <polyline points="12 19 5 12 12 5" />
+        </svg>
+        Back
+      </button>
+      <h2 className="page-title">
+        <span className="page-title-icon trending">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+            <polyline points="17 6 23 6 23 12" />
+          </svg>
+        </span>
+        Trending
+      </h2>
 
       {trending.categories.length > 0 && (
         <div className="trending-section">

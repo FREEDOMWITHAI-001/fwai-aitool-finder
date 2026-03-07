@@ -49,7 +49,6 @@ export default function AuthPage() {
         const finalRole = role === 'Other' ? customRole : role;
         await signUp(email, password, finalRole);
       }
-      // Auth state listener in App.jsx handles the rest
     } catch (err) {
       const code = err.code || '';
       if (code === 'auth/email-already-in-use') {
@@ -74,9 +73,23 @@ export default function AuthPage() {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-brand">
-          <h1 className="auth-logo">AI RADAR</h1>
+          <div className="auth-brand-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+          </div>
+          <h1 className="auth-logo">AI Radar</h1>
           <p className="auth-tagline">by Freedom with AI</p>
         </div>
+
+        <h2 className="auth-welcome">{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
+        <p className="auth-welcome-sub">
+          {isLogin
+            ? 'Sign in to discover the perfect AI tools'
+            : 'Get started with 50 free credits'}
+        </p>
 
         <div className="auth-tabs">
           <button
@@ -169,10 +182,10 @@ export default function AuthPage() {
             {loading ? (
               <span className="btn-loading">
                 <span className="spinner" />
-                {isLogin ? 'Logging in...' : 'Creating account...'}
+                {isLogin ? 'Signing in...' : 'Creating account...'}
               </span>
             ) : (
-              isLogin ? 'Log In' : 'Create Account'
+              isLogin ? 'Sign In' : 'Create Account'
             )}
           </button>
         </form>
@@ -189,7 +202,7 @@ export default function AuthPage() {
           <p className="auth-footer">
             Already have an account?{' '}
             <button className="auth-link" onClick={() => { setIsLogin(true); setError(''); }}>
-              Log in
+              Sign in
             </button>
           </p>
         )}

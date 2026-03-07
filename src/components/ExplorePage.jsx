@@ -12,8 +12,22 @@ export default function ExplorePage({ onSearchQuery, onBack }) {
 
   return (
     <div className="explore-page">
-      <button className="back-btn" onClick={onBack}>{'\u2190'} Back</button>
-      <h2 className="page-title">{'\uD83D\uDD0D'} Explore AI Tools</h2>
+      <button className="back-btn" onClick={onBack}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12" />
+          <polyline points="12 19 5 12 12 5" />
+        </svg>
+        Back
+      </button>
+      <h2 className="page-title">
+        <span className="page-title-icon explore">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+          </svg>
+        </span>
+        Explore AI Tools
+      </h2>
 
       <div className="explore-chips">
         {CATEGORIES.map(cat => (
@@ -38,7 +52,12 @@ export default function ExplorePage({ onSearchQuery, onBack }) {
             </div>
             <p className="explore-bestfor">{tool.bestFor}</p>
             <div className="explore-card-bottom">
-              <span className="explore-rating">{'\u2605'} {tool.rating}/5</span>
+              <span className="explore-rating">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                </svg>
+                {tool.rating}/5
+              </span>
               <div className="explore-actions">
                 <button
                   className="explore-similar-btn"
@@ -47,7 +66,11 @@ export default function ExplorePage({ onSearchQuery, onBack }) {
                   Find Similar
                 </button>
                 <a href={tool.url} target="_blank" rel="noopener noreferrer" className="explore-open-btn">
-                  Open {'\u2192'}
+                  Open
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="7" y1="17" x2="17" y2="7" />
+                    <polyline points="7 7 17 7 17 17" />
+                  </svg>
                 </a>
               </div>
             </div>
