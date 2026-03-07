@@ -8,7 +8,7 @@ export default defineConfig({
       '/api/ai': {
         target: 'https://generativelanguage.googleapis.com',
         changeOrigin: true,
-        rewrite: () => '/v1beta/models/gemini-2.5-flash:generateContent',
+        rewrite: () => '/v1beta/models/gemini-2.0-flash:generateContent',
       },
     },
   },
