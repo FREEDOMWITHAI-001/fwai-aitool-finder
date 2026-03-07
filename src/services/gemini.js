@@ -2,7 +2,7 @@
 // In prod: calls googleapis.com directly (deploy behind your own domain/proxy)
 const GEMINI_ENDPOINT = import.meta.env.DEV
   ? '/api/ai'
-  : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+  : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 function buildPrompt(userQuery, { role = '', budget = '', teamSize = '', excludeTools = [] } = {}) {
   let context = '';
@@ -151,9 +151,6 @@ async function geminiCall(promptText) {
         temperature: 0.7,
         maxOutputTokens: 4096,
       },
-      tools: [{
-        google_search: {}
-      }],
     }),
   });
 
