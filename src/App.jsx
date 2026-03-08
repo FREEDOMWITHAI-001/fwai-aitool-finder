@@ -137,6 +137,7 @@ export default function App() {
       trackSearch(trimmed, inferCategory(trimmed));
     } catch (error) {
       const msg = error.message || '';
+      console.error('[App] Search error:', msg, error);
 
       if (msg === 'API_KEY_MISSING') {
         setStatus('error');
@@ -149,6 +150,7 @@ export default function App() {
         return;
       }
       if (msg.includes('API_ERROR_401') || msg.includes('API_ERROR_403')) {
+        console.error('[App] 401/403 error — check API key validity and Gemini API is enabled in Google Cloud Console');
         setStatus('error');
         setErrorType('api_key');
         return;
