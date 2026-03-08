@@ -20,12 +20,6 @@ export default function ResultsSection({
 
       {status === 'results' && (
         <>
-          {isFallback && (
-            <div className="fallback-notice">
-              Showing results from our local database (AI service unavailable)
-            </div>
-          )}
-
           {summary && (
             <div className="ai-summary">
               <span className="ai-summary-icon">
