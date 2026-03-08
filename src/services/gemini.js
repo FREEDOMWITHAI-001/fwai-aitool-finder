@@ -134,7 +134,7 @@ function validateResponse(parsed) {
 async function geminiCall(promptText) {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
-  if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
+  if (!apiKey || apiKey.toLowerCase().includes('your_gemini_api_key')) {
     throw new Error('API_KEY_MISSING');
   }
 
