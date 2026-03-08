@@ -134,9 +134,17 @@ function validateResponse(parsed) {
 async function geminiCall(promptText) {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
+  console.log('[Gemini] API key exists:', !!apiKey);
+  console.log('[Gemini] API key length:', apiKey ? apiKey.length : 0);
+  console.log('[Gemini] API key prefix:', apiKey ? apiKey.substring(0, 8) + '...' : 'NONE');
+  console.log('[Gemini] Endpoint:', GEMINI_ENDPOINT);
+
   if (!apiKey || apiKey.toLowerCase().includes('your_gemini_api_key')) {
+    console.error('[Gemini] API key is missing or placeholder');
     throw new Error('API_KEY_MISSING');
   }
+
+  console.log('[Gemini] Making API call...');
 
   const response = await fetch(GEMINI_ENDPOINT, {
     method: 'POST',
@@ -154,13 +162,19 @@ async function geminiCall(promptText) {
     }),
   });
 
+  console.log('[Gemini] Response status:', response.status);
+
   if (!response.ok) {
+    const errorBody = await response.text();
+    console.error('[Gemini] Error response:', errorBody);
     throw new Error(`API_ERROR_${response.status}`);
   }
 
   const data = await response.json();
+  console.log('[Gemini] Response received successfully');
 
   if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+    console.error('[Gemini] Invalid response structure:', JSON.stringify(data));
     throw new Error('INVALID_RESPONSE');
   }
 
