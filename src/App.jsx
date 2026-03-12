@@ -11,6 +11,7 @@ import ComparisonModal from './components/ComparisonModal';
 import TrendingPage from './components/TrendingPage';
 import ExplorePage from './components/ExplorePage';
 import WorkflowSection from './components/WorkflowSection';
+import CompareFloatingPopup from './components/CompareFloatingPopup';
 import { callGeminiAPI, callGeminiCompareAPI } from './services/gemini';
 import {
   onAuthChange, logOut, getCredits, useCredit, topUpCreditsOnce,
@@ -133,10 +134,58 @@ export default function App() {
     return 'General';
   }
 
-  const performSearch = useCallback(async (searchQuery) => {
+  // Cache helpers for search results
+  const getResultsCacheKey = useCallback((uid) => `aitf_results_${uid}`, []);
+
+  const getCachedResults = useCallback((searchQuery) => {
+    if (!user) return null;
+    try {
+      const cache = JSON.parse(localStorage.getItem(getResultsCacheKey(user.uid)) || '{}');
+      const entry = cache[searchQuery.toLowerCase()];
+      if (!entry) return null;
+      // Cache valid for 24 hours
+      if (Date.now() - entry.savedAt > 24 * 60 * 60 * 1000) return null;
+      return entry;
+    } catch { return null; }
+  }, [user, getResultsCacheKey]);
+
+  const saveResultsToCache = useCallback((searchQuery, toolsData, summaryText) => {
+    if (!user) return;
+    try {
+      const cacheKey = getResultsCacheKey(user.uid);
+      const cache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+      cache[searchQuery.toLowerCase()] = {
+        tools: toolsData,
+        summary: summaryText,
+        savedAt: Date.now(),
+      };
+      // Keep only last 20 searches in cache
+      const entries = Object.entries(cache).sort((a, b) => b[1].savedAt - a[1].savedAt);
+      const trimmed = Object.fromEntries(entries.slice(0, 20));
+      localStorage.setItem(cacheKey, JSON.stringify(trimmed));
+    } catch { /* storage full — ignore */ }
+  }, [user, getResultsCacheKey]);
+
+  const performSearch = useCallback(async (searchQuery, { useCache = false } = {}) => {
     const trimmed = searchQuery.trim();
     if (!trimmed || trimmed.length < 3) return;
     if (!user) return;
+
+    setErrorType('');
+    setCompareSelected([]);
+
+    // Check cache first when loading from history
+    if (useCache) {
+      const cached = getCachedResults(trimmed);
+      if (cached) {
+        setTools(cached.tools);
+        setSummary(cached.summary);
+        setQuery(trimmed);
+        setIsFallback(false);
+        setStatus('results');
+        return;
+      }
+    }
 
     if (credits <= 0) {
       setStatus('error');
@@ -144,8 +193,6 @@ export default function App() {
       return;
     }
 
-    setErrorType('');
-    setCompareSelected([]);
     setTools([]);
 
     // Deduct 1 credit — update UI instantly, persist to localStorage + Firebase
@@ -165,7 +212,8 @@ export default function App() {
       General: 'These AI tools represent the best the market has to offer, carefully selected to match your specific needs with powerful features, intuitive interfaces, and proven real-world performance.',
     };
     const category = inferCategory(trimmed);
-    setSummary(categorySummaries[category] || categorySummaries.General);
+    const initialSummary = categorySummaries[category] || categorySummaries.General;
+    setSummary(initialSummary);
     setIsFallback(false);
     setStatus('analyzing');
 
@@ -178,6 +226,9 @@ export default function App() {
     setIsFallback(true);
     setStatus('results');
 
+    // Cache local results immediately
+    saveResultsToCache(trimmed, localResults, initialSummary);
+
     // Try upgrading to Gemini results in background (only if valid)
     callGeminiAPI(trimmed, { role: userRole, ...filters })
       .then(result => {
@@ -186,7 +237,13 @@ export default function App() {
             // Merge: Gemini results first, then fill with local results not in Gemini
             const geminiNames = new Set(result.tools.map(t => t.name));
             const extraLocal = prev.filter(t => !geminiNames.has(t.name));
-            return [...result.tools, ...extraLocal];
+            const merged = [...result.tools, ...extraLocal];
+            // Keep even count so grid rows are always full
+            const final = merged.length % 2 !== 0 ? merged.slice(0, merged.length - 1) : merged;
+            // Update cache with better results
+            const newSummary = result.summary || initialSummary;
+            saveResultsToCache(trimmed, final, newSummary);
+            return final;
           });
           setSummary(result.summary || '');
           setIsFallback(false);
@@ -201,7 +258,7 @@ export default function App() {
     });
     saveSearchHistory(user.uid, trimmed).catch(() => {});
     trackSearch(trimmed, inferCategory(trimmed));
-  }, [user, credits, userRole, filters]);
+  }, [user, credits, userRole, filters, getCachedResults, saveResultsToCache]);
 
   const handleSearch = useCallback(() => {
     performSearch(query);
@@ -236,40 +293,46 @@ export default function App() {
       const excludeNames = tools.map(t => t.name);
       const existingNames = new Set(tools.map(t => t.name.toLowerCase()));
 
-      // Get more local results (never duplicates)
+      // Get 2 more local results (never duplicates)
       const { findMoreTools } = await import('./utils/fallback');
-      const localMore = findMoreTools(query, excludeNames);
+      const localMore = findMoreTools(query, excludeNames, 2);
       const uniqueLocal = localMore.filter(t => !existingNames.has(t.name.toLowerCase()));
 
-      // Add local results immediately if any
       if (uniqueLocal.length > 0) {
         setTools(prev => [...prev, ...uniqueLocal]);
         setCredits(prev => { const n = prev - 1; return n >= 0 ? n : 0; });
         useCredit(user.uid).catch(() => {});
-      }
-
-      // Always try Gemini for more results
-      const allExcluded = [...excludeNames, ...uniqueLocal.map(t => t.name)];
-      try {
-        const result = await callGeminiAPI(query, {
-          role: userRole,
-          ...filters,
-          excludeTools: allExcluded,
-        });
-        if (result.tools && result.tools.length > 0) {
-          setTools(prev => {
-            const shown = new Set(prev.map(t => t.name.toLowerCase()));
-            const fresh = result.tools.filter(t => !shown.has(t.name.toLowerCase()));
-            return fresh.length > 0 ? [...prev, ...fresh] : prev;
+      } else {
+        // No more local tools, try Gemini for 2 more
+        try {
+          const result = await callGeminiAPI(query, {
+            role: userRole,
+            ...filters,
+            excludeTools: excludeNames,
+            maxTools: 2,
           });
+          if (result.tools && result.tools.length > 0) {
+            setTools(prev => {
+              const shown = new Set(prev.map(t => t.name.toLowerCase()));
+              const fresh = result.tools.filter(t => !shown.has(t.name.toLowerCase())).slice(0, 2);
+              return fresh.length > 0 ? [...prev, ...fresh] : prev;
+            });
+          }
+        } catch {
+          // Gemini failed — button stays visible for retry
         }
-      } catch {
-        // Gemini failed — button stays visible for retry
       }
     } finally {
       setShowMoreLoading(false);
     }
   }, [user, tools, query, userRole, filters, showMoreLoading, credits]);
+
+  // Keep search results cache in sync whenever tools update
+  useEffect(() => {
+    if (tools.length > 0 && query.trim().length >= 3 && status === 'results') {
+      saveResultsToCache(query.trim(), tools, summary);
+    }
+  }, [tools, query, summary, status, saveResultsToCache]);
 
   // Bookmarks
   const handleToggleBookmark = useCallback(async (tool) => {
@@ -280,10 +343,10 @@ export default function App() {
       setBookmarks(prev => prev.filter(b => b.name !== tool.name));
       removeBookmark(user.uid, tool.name).catch(() => {});
     } else {
-      // Add immediately to state, then persist
+      // Normalize tool data to ensure consistent shape
       const saved = {
         name: tool.name,
-        url: tool.url,
+        url: tool.url || '',
         rating: tool.rating || 0,
         ratingSource: tool.ratingSource || '',
         pricing: tool.pricing || 'Freemium',
@@ -291,14 +354,16 @@ export default function App() {
         savedAt: Date.now(),
       };
       setBookmarks(prev => [saved, ...prev]);
-      saveBookmark(user.uid, tool).catch(() => {});
+      // Pass the normalized object so Firebase gets the same data
+      saveBookmark(user.uid, saved).catch(() => {});
     }
   }, [user, bookmarks]);
 
   const handleRemoveBookmark = useCallback(async (toolName) => {
     if (!user) return;
-    await removeBookmark(user.uid, toolName);
+    // Update UI immediately, persist in background
     setBookmarks(prev => prev.filter(b => b.name !== toolName));
+    removeBookmark(user.uid, toolName).catch(() => {});
   }, [user]);
 
   // Compare
@@ -362,7 +427,7 @@ export default function App() {
   const navigateToSearch = useCallback((searchQuery) => {
     setPage('home');
     setQuery(searchQuery);
-    performSearch(searchQuery);
+    performSearch(searchQuery, { useCache: true });
   }, [performSearch]);
 
   // Show loading spinner while checking auth
@@ -492,6 +557,16 @@ export default function App() {
           bookmarks={bookmarks}
           onRemove={handleRemoveBookmark}
           onClose={() => setShowBookmarks(false)}
+        />
+      )}
+
+      {compareSelected.length > 0 && (
+        <CompareFloatingPopup
+          selected={compareSelected}
+          onRemove={handleToggleCompare}
+          onCompare={handleCompare}
+          compareLoading={compareLoading}
+          credits={credits}
         />
       )}
 

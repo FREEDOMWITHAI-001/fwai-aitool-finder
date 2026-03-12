@@ -290,19 +290,26 @@ export async function removeBookmark(uid, toolName) {
 
 export async function getBookmarks(uid) {
   const key = `aitf_bookmarks_${uid}`;
+  const stored = JSON.parse(localStorage.getItem(key) || '{}');
   try {
     const snap = await get(ref(rtdb, `users/${uid}/bookmarks`));
     if (!snap.exists()) {
-      // Firebase has none — check localStorage in case of prior offline saves
-      const stored = JSON.parse(localStorage.getItem(key) || '{}');
+      // Firebase has none — use localStorage and sync back to Firebase
+      if (Object.keys(stored).length > 0) {
+        set(ref(rtdb, `users/${uid}/bookmarks`), stored).catch(() => {});
+      }
       return Object.values(stored).sort((a, b) => b.savedAt - a.savedAt);
     }
-    const obj = snap.val();
-    // Sync Firebase data back to localStorage
-    localStorage.setItem(key, JSON.stringify(obj));
-    return Object.values(obj).sort((a, b) => b.savedAt - a.savedAt);
+    const firebaseData = snap.val();
+    // Merge: combine Firebase + localStorage so no bookmarks are lost
+    const merged = { ...stored, ...firebaseData };
+    // Sync merged data back to both stores
+    localStorage.setItem(key, JSON.stringify(merged));
+    if (Object.keys(stored).length > 0 && Object.keys(stored).some(k => !firebaseData[k])) {
+      set(ref(rtdb, `users/${uid}/bookmarks`), merged).catch(() => {});
+    }
+    return Object.values(merged).sort((a, b) => b.savedAt - a.savedAt);
   } catch {
-    const stored = JSON.parse(localStorage.getItem(key) || '{}');
     return Object.values(stored).sort((a, b) => b.savedAt - a.savedAt);
   }
 }

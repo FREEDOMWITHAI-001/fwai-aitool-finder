@@ -81,11 +81,11 @@ export function findLocalRecommendations(query) {
     return b.rating - a.rating;
   });
 
-  return matches.slice(0, 5).map(tool => formatTool(tool));
+  return matches.slice(0, 6).map(tool => formatTool(tool));
 }
 
 // Find more tools — always returns results, never duplicates
-export function findMoreTools(query, excludeNames = []) {
+export function findMoreTools(query, excludeNames = [], count = 2) {
   const q = query.toLowerCase();
   const excludeSet = new Set(excludeNames.map(n => n.toLowerCase()));
 
@@ -101,7 +101,7 @@ export function findMoreTools(query, excludeNames = []) {
   if (detectedCategory) {
     results = excludeShown(filterByCategory(detectedCategory));
     results.sort((a, b) => b.rating - a.rating);
-    return results.slice(0, 5).map(tool => formatTool(tool));
+    return results.slice(0, count).map(tool => formatTool(tool));
   }
 
   // 2. No category detected — keyword match by name/bestFor
@@ -120,5 +120,5 @@ export function findMoreTools(query, excludeNames = []) {
 
   results.sort((a, b) => b.rating - a.rating);
 
-  return results.slice(0, 5).map(tool => formatTool(tool));
+  return results.slice(0, count).map(tool => formatTool(tool));
 }

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import ToolCard from './ToolCard';
-import { getLocalWorkflow, generateWorkflowWithGemini } from '../services/workflow';
+import { getLocalWorkflow, generateWorkflowWithGemini, getToolsForCategory } from '../services/workflow';
 
 const CATEGORY_ICONS = {
   video: (
@@ -60,6 +60,13 @@ export default function WorkflowSection({ credits, bookmarkedNames, onToggleBook
   const [goal, setGoal] = useState('');
   const [workflow, setWorkflow] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [stepToolCounts, setStepToolCounts] = useState({});
+
+  const handleSeeMore = useCallback((stepNumber, category, currentCount) => {
+    const newCount = currentCount + 2;
+    const tools = getToolsForCategory(category, newCount);
+    setStepToolCounts(prev => ({ ...prev, [stepNumber]: tools }));
+  }, []);
 
   const runWorkflow = useCallback(async (query) => {
     const trimmed = query.trim();
@@ -67,6 +74,7 @@ export default function WorkflowSection({ credits, bookmarkedNames, onToggleBook
 
     setLoading(true);
     setWorkflow(null);
+    setStepToolCounts({});
 
     // Show "Generating Workflow..." state briefly
     await new Promise(resolve => setTimeout(resolve, 1200));
@@ -221,21 +229,39 @@ export default function WorkflowSection({ credits, bookmarkedNames, onToggleBook
               </div>
 
               {/* Tool Cards — same layout as Find Tools */}
-              {step.tools.length > 0 && (
-                <div className="tool-list workflow-tool-list">
-                  {step.tools.map((tool, idx) => (
-                    <ToolCard
-                      key={`${step.number}-${tool.name}`}
-                      tool={tool}
-                      index={idx}
-                      isBookmarked={bookmarkedNames?.has(tool.name)}
-                      onToggleBookmark={onToggleBookmark}
-                      isSelected={false}
-                      onToggleCompare={() => {}}
-                    />
-                  ))}
-                </div>
-              )}
+              {step.tools.length > 0 && (() => {
+                const displayTools = stepToolCounts[step.number] || step.tools;
+                const totalAvailable = getToolsForCategory(step.category, 100).length;
+                const hasMore = displayTools.length < totalAvailable;
+                return (
+                  <>
+                    <div className="tool-list workflow-tool-list">
+                      {displayTools.map((tool, idx) => (
+                        <ToolCard
+                          key={`${step.number}-${tool.name}`}
+                          tool={tool}
+                          index={idx}
+                          isBookmarked={bookmarkedNames?.has(tool.name)}
+                          onToggleBookmark={onToggleBookmark}
+                          isSelected={false}
+                          onToggleCompare={() => {}}
+                        />
+                      ))}
+                    </div>
+                    {hasMore && (
+                      <button
+                        className="workflow-see-more-btn"
+                        onClick={() => handleSeeMore(step.number, step.category, displayTools.length)}
+                      >
+                        See More {step.categoryLabel} Tools
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           ))}
         </div>

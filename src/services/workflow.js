@@ -91,7 +91,7 @@ function matchTemplate(goal) {
 }
 
 // Get top tools for a category
-function getToolsForCategory(category, count = 3) {
+export function getToolsForCategory(category, count = 2) {
   return tools
     .filter(t => t.primary === category)
     .sort((a, b) => b.rating - a.rating)

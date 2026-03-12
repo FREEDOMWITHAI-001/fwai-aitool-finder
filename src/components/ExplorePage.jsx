@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import toolsData from '../data/tools.json';
+import { getFaviconUrl } from './ToolCard';
 
 const CATEGORIES = ['All', 'Video', 'Coding', 'Design', 'Writing', 'Marketing', 'Audio', 'Research', 'Automation'];
 
@@ -45,19 +46,28 @@ export default function ExplorePage({ onSearchQuery, onBack }) {
         {filtered.map(tool => (
           <div key={tool.name} className="explore-card">
             <div className="explore-card-top">
-              <h3 className="explore-tool-name">{tool.name}</h3>
+              <img className="explore-tool-logo" src={getFaviconUrl(tool.url)} alt={`${tool.name} logo`} />
+              <div className="explore-tool-title">
+                <h3 className="explore-tool-name">{tool.name}</h3>
+                <span className="explore-category-tag">{tool.primary}</span>
+              </div>
               <span className={`pricing-badge pricing-${tool.pricing.toLowerCase()}`}>
                 {tool.pricing}
               </span>
             </div>
+
             <p className="explore-bestfor">{tool.bestFor}</p>
+
+            <div className="explore-rating-row">
+              <div className="explore-stars">
+                {[1, 2, 3, 4, 5].map(s => (
+                  <span key={s} className={`star ${s <= Math.round(tool.rating) ? 'filled' : 'empty'}`}>★</span>
+                ))}
+              </div>
+              <span className="explore-rating-num">{tool.rating}/5</span>
+            </div>
+
             <div className="explore-card-bottom">
-              <span className="explore-rating">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-                </svg>
-                {tool.rating}/5
-              </span>
               <div className="explore-actions">
                 <button
                   className="explore-similar-btn"

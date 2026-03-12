@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 function renderStars(rating) {
   const full = Math.floor(rating);
   const hasHalf = rating - full >= 0.3;
@@ -12,7 +14,16 @@ function renderStars(rating) {
   return stars;
 }
 
-// Generate a gradient based on tool name for the icon
+export function getFaviconUrl(url) {
+  try {
+    const domain = new URL(url).hostname;
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+  } catch {
+    return null;
+  }
+}
+
+// Generate a gradient based on tool name for the icon (fallback)
 function getToolColor(name) {
   const colors = [
     ['#6366f1', '#8b5cf6'],
@@ -29,17 +40,37 @@ function getToolColor(name) {
   return colors[Math.abs(hash) % colors.length];
 }
 
+function ToolLogo({ url, name }) {
+  const [failed, setFailed] = useState(false);
+  const faviconUrl = getFaviconUrl(url);
+  const [c1, c2] = getToolColor(name);
+  const initials = name.split(/[\s.]+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+
+  if (faviconUrl && !failed) {
+    return (
+      <div className="tool-icon tool-icon-logo">
+        <img
+          src={faviconUrl}
+          alt={`${name} logo`}
+          onError={() => setFailed(true)}
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="tool-icon" style={{ background: `linear-gradient(135deg, ${c1}, ${c2})` }}>
+      <span className="tool-icon-text">{initials}</span>
+    </div>
+  );
+}
+
 export default function ToolCard({ tool, index, isBookmarked, onToggleBookmark, isSelected, onToggleCompare }) {
   const pricingClass = tool.pricing.toLowerCase();
-  const [c1, c2] = getToolColor(tool.name);
-  const initials = tool.name.split(/[\s.]+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
   return (
     <div className={`tool-card fade-in ${isSelected ? 'selected-for-compare' : ''}`} style={{ animationDelay: `${index * 0.08}s` }}>
       <div className="tool-card-top">
-        <div className="tool-icon" style={{ background: `linear-gradient(135deg, ${c1}, ${c2})` }}>
-          <span className="tool-icon-text">{initials}</span>
-        </div>
+        <ToolLogo url={tool.url} name={tool.name} />
         <div className="tool-title-area">
           <h3 className="tool-name">{tool.name}</h3>
           {tool.bestFor && <p className="tool-best-for">{tool.bestFor}</p>}

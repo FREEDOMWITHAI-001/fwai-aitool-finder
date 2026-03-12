@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
 import { getTrending } from '../services/firebase';
+import { getFaviconUrl } from './ToolCard';
+import tools from '../data/tools.json';
 
-const DEFAULT_CATEGORIES = [
-  { name: 'Video', count: 120 },
-  { name: 'Coding', count: 98 },
-  { name: 'Design', count: 85 },
-  { name: 'Writing', count: 76 },
-  { name: 'Marketing', count: 65 },
-  { name: 'Audio', count: 52 },
-  { name: 'Research', count: 48 },
-  { name: 'Automation', count: 42 },
-];
+const CATEGORIES = ['Video', 'Coding', 'Design', 'Writing', 'Marketing', 'Audio', 'Research', 'Automation'];
+
+// Get top tools per category sorted by rating
+function getTopToolsByCategory(category, count = 4) {
+  return tools
+    .filter(t => t.primary === category.toLowerCase())
+    .sort((a, b) => b.rating - a.rating)
+    .slice(0, count);
+}
 
 const DEFAULT_QUERIES = [
   { query: 'AI video editing tools', count: 45 },
@@ -24,24 +25,13 @@ const DEFAULT_QUERIES = [
 ];
 
 export default function TrendingPage({ onSearchQuery, onBack }) {
-  const [trending, setTrending] = useState({ categories: DEFAULT_CATEGORIES, queries: DEFAULT_QUERIES });
-  const [loading, setLoading] = useState(true);
+  const [queries, setQueries] = useState(DEFAULT_QUERIES);
 
   useEffect(() => {
-    setLoading(false);
-    // Try to get live data from Firebase, merge with defaults
     getTrending().then(data => {
-      const hasData = data.categories.length > 0 || data.queries.length > 0;
-      if (hasData) {
-        // Merge: use Firebase data but fill gaps with defaults
-        const cats = data.categories.length > 0 ? data.categories : DEFAULT_CATEGORIES;
-        const queries = data.queries.length > 0 ? data.queries : DEFAULT_QUERIES;
-        setTrending({ categories: cats, queries });
-      }
+      if (data.queries.length > 0) setQueries(data.queries);
     }).catch(() => {});
   }, []);
-
-  const maxCount = trending.categories[0]?.count || 1;
 
   return (
     <div className="trending-page">
@@ -59,52 +49,83 @@ export default function TrendingPage({ onSearchQuery, onBack }) {
             <polyline points="17 6 23 6 23 12" />
           </svg>
         </span>
-        Trending
+        Trending AI Tools
       </h2>
 
-      {loading ? (
-        <p className="loading-text">Loading trends...</p>
-      ) : (
-        <>
-          <div className="trending-section">
-            <h3 className="trending-subtitle">Popular Categories</h3>
-            <div className="trending-bars">
-              {trending.categories.map(cat => (
-                <button
-                  key={cat.name}
-                  className="trending-bar-item"
-                  onClick={() => onSearchQuery(`I need AI tools for ${cat.name.toLowerCase()}`)}
-                >
-                  <span className="trending-bar-label">{cat.name}</span>
-                  <div className="trending-bar-track">
-                    <div
-                      className="trending-bar-fill"
-                      style={{ width: `${Math.max(10, (cat.count / maxCount) * 100)}%` }}
-                    />
-                  </div>
-                  <span className="trending-bar-count">{cat.count}</span>
-                </button>
-              ))}
+      {CATEGORIES.map(category => {
+        const topTools = getTopToolsByCategory(category);
+        if (topTools.length === 0) return null;
+        return (
+          <div key={category} className="trending-category-section">
+            <div className="trending-category-header">
+              <h3 className="trending-category-title">{category}</h3>
+              <button
+                className="trending-see-all"
+                onClick={() => onSearchQuery(`I need AI tools for ${category.toLowerCase()}`)}
+              >
+                See all →
+              </button>
+            </div>
+            <div className="trending-tools-grid">
+              {topTools.map(tool => {
+                const pricingClass = tool.pricing.toLowerCase();
+                const faviconUrl = getFaviconUrl(tool.url);
+                return (
+                  <a
+                    key={tool.name}
+                    href={tool.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="trending-tool-card"
+                  >
+                    <div className="trending-tool-header">
+                      <div className="trending-tool-icon">
+                        <img src={faviconUrl} alt={`${tool.name} logo`} />
+                      </div>
+                      <div className="trending-tool-title">
+                        <span className="trending-tool-name">{tool.name}</span>
+                        <span className={`pricing-badge pricing-${pricingClass}`}>{tool.pricing}</span>
+                      </div>
+                    </div>
+                    <p className="trending-tool-desc">{tool.bestFor}</p>
+                    <div className="trending-tool-footer">
+                      <div className="trending-tool-stars">
+                        {[1, 2, 3, 4, 5].map(s => (
+                          <span key={s} className={`star ${s <= Math.round(tool.rating) ? 'filled' : 'empty'}`}>★</span>
+                        ))}
+                        <span className="trending-tool-rating-num">{tool.rating}/5</span>
+                      </div>
+                      <span className="trending-tool-open">
+                        Open
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="7" y1="17" x2="17" y2="7" />
+                          <polyline points="7 7 17 7 17 17" />
+                        </svg>
+                      </span>
+                    </div>
+                  </a>
+                );
+              })}
             </div>
           </div>
+        );
+      })}
 
-          <div className="trending-section">
-            <h3 className="trending-subtitle">Popular Searches</h3>
-            <div className="trending-queries">
-              {trending.queries.map((q, i) => (
-                <button
-                  key={i}
-                  className="trending-query-chip"
-                  onClick={() => onSearchQuery(q.query)}
-                >
-                  {q.query}
-                  <span className="trending-query-count">{q.count}x</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
+      <div className="trending-section">
+        <h3 className="trending-subtitle">Popular Searches</h3>
+        <div className="trending-queries">
+          {queries.map((q, i) => (
+            <button
+              key={i}
+              className="trending-query-chip"
+              onClick={() => onSearchQuery(q.query)}
+            >
+              {q.query}
+              <span className="trending-query-count">{q.count}x</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import { getFaviconUrl } from './ToolCard';
+
 export default function BookmarksPanel({ bookmarks, onRemove, onClose }) {
   return (
     <div className="bookmarks-overlay" onClick={onClose}>
@@ -19,6 +21,7 @@ export default function BookmarksPanel({ bookmarks, onRemove, onClose }) {
             {bookmarks.map(tool => (
               <div key={tool.name} className="bookmark-card">
                 <div className="bookmark-info">
+                  {tool.url && <img className="bookmark-logo" src={getFaviconUrl(tool.url)} alt={tool.name} />}
                   <h3 className="bookmark-name">{tool.name}</h3>
                   {tool.bestFor && <span className="bookmark-bestfor">{tool.bestFor}</span>}
                   <span className={`pricing-badge pricing-${(tool.pricing || 'freemium').toLowerCase()}`}>
