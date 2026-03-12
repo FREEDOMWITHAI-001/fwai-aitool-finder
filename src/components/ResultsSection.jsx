@@ -84,22 +84,6 @@ export default function ResultsSection({
             <p className="no-more-tools">All available tools have been loaded.</p>
           )}
 
-          {compareSelected?.length >= 2 && (
-            <button
-              className="compare-float-btn"
-              onClick={onCompare}
-              disabled={compareLoading || credits <= 0}
-            >
-              {compareLoading ? (
-                <span className="btn-loading">
-                  <span className="spinner" />
-                  Comparing...
-                </span>
-              ) : (
-                `Compare ${compareSelected.length} Tools (1 credit)`
-              )}
-            </button>
-          )}
         </>
       )}
     </section>

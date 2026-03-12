@@ -174,7 +174,7 @@ export default function App() {
     } catch { /* storage full — ignore */ }
   }, [user, getResultsCacheKey]);
 
-  const performSearch = useCallback(async (searchQuery, { useCache = false } = {}) => {
+  const performSearch = useCallback(async (searchQuery, { useCache = false, skipGemini = false } = {}) => {
     const trimmed = searchQuery.trim();
     if (!trimmed || trimmed.length < 3) return;
     if (!user) return;
@@ -242,29 +242,31 @@ export default function App() {
     // Cache local results immediately
     saveResultsToCache(trimmed, localResults, initialSummary);
 
-    // Try upgrading to Gemini results in background (only if valid)
-    callGeminiAPI(trimmed, { role: userRole, ...filters })
-      .then(result => {
-        if (result.tools && result.tools.length > 0) {
-          setTools(prev => {
-            // Merge: Gemini results first, then fill with local results not in Gemini
-            const geminiNames = new Set(result.tools.map(t => t.name));
-            const extraLocal = prev.filter(t => !geminiNames.has(t.name));
-            const merged = [...result.tools, ...extraLocal];
-            // Trim to complete rows based on current grid columns
-            const cols = toolListColumns || 3;
-            const remainder = merged.length % cols;
-            const final = remainder !== 0 ? merged.slice(0, merged.length - remainder) : merged;
-            // Update cache with better results
-            const newSummary = result.summary || initialSummary;
-            saveResultsToCache(trimmed, final, newSummary);
-            return final;
-          });
-          setSummary(result.summary || '');
-          setIsFallback(false);
-        }
-      })
-      .catch(() => {});
+    // Try upgrading to Gemini results in background (skip for category chip clicks)
+    if (!skipGemini) {
+      callGeminiAPI(trimmed, { role: userRole, ...filters })
+        .then(result => {
+          if (result.tools && result.tools.length > 0) {
+            setTools(prev => {
+              // Merge: Gemini results first, then fill with local results not in Gemini
+              const geminiNames = new Set(result.tools.map(t => t.name));
+              const extraLocal = prev.filter(t => !geminiNames.has(t.name));
+              const merged = [...result.tools, ...extraLocal];
+              // Trim to complete rows based on current grid columns
+              const cols = toolListColumns || 3;
+              const remainder = merged.length % cols;
+              const final = remainder !== 0 ? merged.slice(0, merged.length - remainder) : merged;
+              // Update cache with better results
+              const newSummary = result.summary || initialSummary;
+              saveResultsToCache(trimmed, final, newSummary);
+              return final;
+            });
+            setSummary(result.summary || '');
+            setIsFallback(false);
+          }
+        })
+        .catch(() => {});
+    }
 
     // Update search history immediately in UI, then persist
     setSearchHistoryState(prev => {
@@ -282,7 +284,7 @@ export default function App() {
   const handleChipClick = useCallback((label, chipQuery) => {
     setActiveChip(label);
     setQuery(chipQuery);
-    performSearch(chipQuery);
+    performSearch(chipQuery, { skipGemini: true });
   }, [performSearch]);
 
   const handleRetry = useCallback(() => {
