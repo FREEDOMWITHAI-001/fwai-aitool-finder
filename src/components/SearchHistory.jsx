@@ -14,21 +14,21 @@ export default function SearchHistory({ history, onSelect }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  if (!history || history.length === 0) return null;
+  const hasHistory = history && history.length > 0;
 
   return (
     <div className="search-history-wrapper" ref={wrapperRef}>
       <button
         className={`header-icon-btn ${open ? 'active' : ''}`}
-        onClick={() => setOpen(!open)}
+        onClick={() => hasHistory && setOpen(!open)}
         title="Search history"
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" />
           <polyline points="12 6 12 12 16 14" />
         </svg>
       </button>
-      {open && (
+      {open && hasHistory && (
         <div className="history-dropdown">
           <div className="history-header">Recent Searches</div>
           {history.map((q, i) => (

@@ -3,7 +3,7 @@ export default function ErrorCard({ type, onRetry, onFallback }) {
     credits_depleted: {
       iconType: 'danger',
       title: 'Credits Depleted',
-      message: "You've used all 50 of your credits. Credits will be connected to a centralized system soon.",
+      message: "You've used all your credits. Credits will be connected to a centralized system soon.",
       showFallback: false,
       showRetry: false,
     },

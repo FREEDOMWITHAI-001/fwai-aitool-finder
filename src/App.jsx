@@ -10,9 +10,10 @@ import BookmarksPanel from './components/BookmarksPanel';
 import ComparisonModal from './components/ComparisonModal';
 import TrendingPage from './components/TrendingPage';
 import ExplorePage from './components/ExplorePage';
+import WorkflowSection from './components/WorkflowSection';
 import { callGeminiAPI, callGeminiCompareAPI } from './services/gemini';
 import {
-  onAuthChange, logOut, getCredits, useCredit, hasCredits,
+  onAuthChange, logOut, getCredits, useCredit, topUpCreditsOnce,
   getUserRole, saveSearchHistory, getSearchHistory,
   saveBookmark, removeBookmark, getBookmarks, trackSearch,
 } from './services/firebase';
@@ -25,6 +26,19 @@ export default function App() {
 
   // Navigation
   const [page, setPage] = useState('home');
+  const [mode, setMode] = useState('find'); // 'find' or 'workflow'
+
+  // Theme
+  const [theme, setTheme] = useState(() => localStorage.getItem('aitf_theme') || 'dark');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('aitf_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  }, []);
 
   // App state
   const [query, setQuery] = useState('');
@@ -59,26 +73,42 @@ export default function App() {
 
   // Listen for auth state changes
   useEffect(() => {
-    const unsubscribe = onAuthChange(async (firebaseUser) => {
+    const unsubscribe = onAuthChange((firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        const [c, role, hist, bm] = await Promise.all([
-          getCredits(firebaseUser.uid),
-          getUserRole(firebaseUser.uid),
-          getSearchHistory(firebaseUser.uid),
-          getBookmarks(firebaseUser.uid),
-        ]);
-        setCredits(c);
-        setUserRole(role);
-        setSearchHistoryState(hist);
-        setBookmarks(bm);
+        // Show cached data instantly from localStorage
+        const uid = firebaseUser.uid;
+        const cachedCredits = parseInt(localStorage.getItem(`aitf_credits_${uid}`) || '0', 10);
+        const cachedRole = localStorage.getItem(`aitf_role_${uid}`) || '';
+        const cachedHistory = JSON.parse(localStorage.getItem(`aitf_history_${uid}`) || '[]');
+        const cachedBookmarks = JSON.parse(localStorage.getItem(`aitf_bookmarks_${uid}`) || '{}');
+        setCredits(cachedCredits);
+        setUserRole(cachedRole);
+        setSearchHistoryState(Array.isArray(cachedHistory) ? cachedHistory.map(h => h.query || h) : []);
+        setBookmarks(Object.values(cachedBookmarks));
+        setAuthLoading(false);
+
+        // One-time top-up for existing users first, then fetch fresh data
+        topUpCreditsOnce(uid).then(() => {
+          return Promise.all([
+            getCredits(uid),
+            getUserRole(uid),
+            getSearchHistory(uid),
+            getBookmarks(uid),
+          ]);
+        }).then(([c, role, hist, bm]) => {
+          setCredits(c);
+          setUserRole(role);
+          setSearchHistoryState(hist);
+          setBookmarks(bm);
+        }).catch(() => {});
       } else {
         setCredits(0);
         setUserRole('');
         setSearchHistoryState([]);
         setBookmarks([]);
+        setAuthLoading(false);
       }
-      setAuthLoading(false);
     });
     return unsubscribe;
   }, []);
@@ -108,68 +138,70 @@ export default function App() {
     if (!trimmed || trimmed.length < 3) return;
     if (!user) return;
 
-    const canSearch = await hasCredits(user.uid);
-    if (!canSearch) {
+    if (credits <= 0) {
       setStatus('error');
       setErrorType('credits_depleted');
       return;
     }
 
-    setStatus('loading');
-    setTools([]);
-    setSummary('');
-    setIsFallback(false);
     setErrorType('');
     setCompareSelected([]);
+    setTools([]);
 
-    try {
-      const result = await callGeminiAPI(trimmed, { role: userRole, ...filters });
-      const newCredits = await useCredit(user.uid);
-      setCredits(newCredits);
-      setTools(result.tools);
-      setSummary(result.summary);
-      setStatus('results');
+    // Deduct 1 credit — update UI instantly, persist to localStorage + Firebase
+    const newCredits = credits - 1;
+    setCredits(newCredits);
+    useCredit(user.uid).catch(() => {});
 
-      // Track history and trending (fire-and-forget)
-      saveSearchHistory(user.uid, trimmed).then(() =>
-        getSearchHistory(user.uid).then(setSearchHistoryState)
-      );
-      trackSearch(trimmed, inferCategory(trimmed));
-    } catch (error) {
-      const msg = error.message || '';
-      console.error('[App] Search error:', msg, error);
+    const categorySummaries = {
+      Video: 'These AI tools offer a powerful suite of capabilities for video creation and editing, from automated subtitle generation and visual effects to AI-driven scene composition and professional-grade post-production.',
+      Coding: 'These AI tools offer a comprehensive suite of features to accelerate software development, from AI-powered code editing to advanced code generation and real-time assistance within existing IDEs.',
+      Design: 'These AI tools bring cutting-edge creative capabilities to your workflow, from intelligent image generation and graphic design automation to intuitive UI/UX prototyping and brand-consistent visual creation.',
+      Writing: 'These AI tools empower your writing process with intelligent content generation, from crafting compelling blog posts and marketing copy to polishing grammar and adapting tone for any audience.',
+      Marketing: 'These AI tools supercharge your marketing strategy with data-driven insights, from automated ad creation and SEO optimization to audience targeting and campaign performance analytics.',
+      Audio: 'These AI tools transform audio production with next-level capabilities, from realistic voice synthesis and music generation to professional podcast editing and intelligent noise removal.',
+      Research: 'These AI tools elevate your research workflow with powerful analytical capabilities, from automated literature reviews and data analysis to citation management and insight extraction from complex datasets.',
+      Automation: 'These AI tools streamline your workflows with intelligent automation, from no-code task orchestration and smart integrations to AI-powered scheduling and repetitive process elimination.',
+      General: 'These AI tools represent the best the market has to offer, carefully selected to match your specific needs with powerful features, intuitive interfaces, and proven real-world performance.',
+    };
+    const category = inferCategory(trimmed);
+    setSummary(categorySummaries[category] || categorySummaries.General);
+    setIsFallback(false);
+    setStatus('analyzing');
 
-      if (msg === 'API_KEY_MISSING') {
-        setStatus('error');
-        setErrorType('api_key');
-        return;
-      }
-      if (msg.includes('API_ERROR_429')) {
-        setStatus('error');
-        setErrorType('rate_limit');
-        return;
-      }
-      if (msg.includes('API_ERROR_401') || msg.includes('API_ERROR_403')) {
-        console.error('[App] 401/403 error — check API key validity and Gemini API is enabled in Google Cloud Console');
-        setStatus('error');
-        setErrorType('api_key');
-        return;
-      }
+    // Show analyzing message briefly
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
-      // Network error or bad response — fallback to local
-      const localResults = findLocalRecommendations(trimmed);
-      const newCredits = await useCredit(user.uid);
-      setCredits(newCredits);
-      setTools(localResults);
-      setSummary('');
-      setIsFallback(true);
-      setStatus('results');
+    // Show category-filtered local results
+    const localResults = findLocalRecommendations(trimmed);
+    setTools(localResults);
+    setIsFallback(true);
+    setStatus('results');
 
-      saveSearchHistory(user.uid, trimmed).then(() =>
-        getSearchHistory(user.uid).then(setSearchHistoryState)
-      );
-    }
-  }, [user, userRole, filters]);
+    // Try upgrading to Gemini results in background (only if valid)
+    callGeminiAPI(trimmed, { role: userRole, ...filters })
+      .then(result => {
+        if (result.tools && result.tools.length > 0) {
+          setTools(prev => {
+            // Merge: Gemini results first, then fill with local results not in Gemini
+            const geminiNames = new Set(result.tools.map(t => t.name));
+            const extraLocal = prev.filter(t => !geminiNames.has(t.name));
+            return [...result.tools, ...extraLocal];
+          });
+          setSummary(result.summary || '');
+          setIsFallback(false);
+        }
+      })
+      .catch(() => {});
+
+    // Update search history immediately in UI, then persist
+    setSearchHistoryState(prev => {
+      const filtered = prev.filter(q => q !== trimmed);
+      return [trimmed, ...filtered].slice(0, 15);
+    });
+    saveSearchHistory(user.uid, trimmed).catch(() => {});
+    trackSearch(trimmed, inferCategory(trimmed));
+  }, [user, credits, userRole, filters]);
 
   const handleSearch = useCallback(() => {
     performSearch(query);
@@ -197,37 +229,69 @@ export default function App() {
 
   // Show More
   const handleShowMore = useCallback(async () => {
-    if (!user || showMoreLoading) return;
-    const canSearch = await hasCredits(user.uid);
-    if (!canSearch) return;
+    if (!user || showMoreLoading || credits <= 0) return;
 
     setShowMoreLoading(true);
     try {
       const excludeNames = tools.map(t => t.name);
-      const result = await callGeminiAPI(query, {
-        role: userRole,
-        ...filters,
-        excludeTools: excludeNames,
-      });
-      const newCredits = await useCredit(user.uid);
-      setCredits(newCredits);
-      setTools(prev => [...prev, ...result.tools]);
-    } catch {
-      // If show more fails, just silently fail
+      const existingNames = new Set(tools.map(t => t.name.toLowerCase()));
+
+      // Get more local results (never duplicates)
+      const { findMoreTools } = await import('./utils/fallback');
+      const localMore = findMoreTools(query, excludeNames);
+      const uniqueLocal = localMore.filter(t => !existingNames.has(t.name.toLowerCase()));
+
+      // Add local results immediately if any
+      if (uniqueLocal.length > 0) {
+        setTools(prev => [...prev, ...uniqueLocal]);
+        setCredits(prev => { const n = prev - 1; return n >= 0 ? n : 0; });
+        useCredit(user.uid).catch(() => {});
+      }
+
+      // Always try Gemini for more results
+      const allExcluded = [...excludeNames, ...uniqueLocal.map(t => t.name)];
+      try {
+        const result = await callGeminiAPI(query, {
+          role: userRole,
+          ...filters,
+          excludeTools: allExcluded,
+        });
+        if (result.tools && result.tools.length > 0) {
+          setTools(prev => {
+            const shown = new Set(prev.map(t => t.name.toLowerCase()));
+            const fresh = result.tools.filter(t => !shown.has(t.name.toLowerCase()));
+            return fresh.length > 0 ? [...prev, ...fresh] : prev;
+          });
+        }
+      } catch {
+        // Gemini failed — button stays visible for retry
+      }
+    } finally {
+      setShowMoreLoading(false);
     }
-    setShowMoreLoading(false);
-  }, [user, tools, query, userRole, filters, showMoreLoading]);
+  }, [user, tools, query, userRole, filters, showMoreLoading, credits]);
 
   // Bookmarks
   const handleToggleBookmark = useCallback(async (tool) => {
     if (!user) return;
     const isBookmarked = bookmarks.some(b => b.name === tool.name);
     if (isBookmarked) {
-      await removeBookmark(user.uid, tool.name);
+      // Remove immediately from state, then persist
       setBookmarks(prev => prev.filter(b => b.name !== tool.name));
+      removeBookmark(user.uid, tool.name).catch(() => {});
     } else {
-      await saveBookmark(user.uid, tool);
-      setBookmarks(prev => [{ ...tool, savedAt: Date.now() }, ...prev]);
+      // Add immediately to state, then persist
+      const saved = {
+        name: tool.name,
+        url: tool.url,
+        rating: tool.rating || 0,
+        ratingSource: tool.ratingSource || '',
+        pricing: tool.pricing || 'Freemium',
+        bestFor: tool.bestFor || '',
+        savedAt: Date.now(),
+      };
+      setBookmarks(prev => [saved, ...prev]);
+      saveBookmark(user.uid, tool).catch(() => {});
     }
   }, [user, bookmarks]);
 
@@ -247,22 +311,52 @@ export default function App() {
     });
   }, []);
 
+  // Build a local comparison from tool data
+  function buildLocalComparison(selectedTools) {
+    const pricingRank = { Free: 3, Freemium: 2, Premium: 1 };
+    const sorted = [...selectedTools].sort((a, b) => b.rating - a.rating);
+    const winner = sorted[0];
+
+    return {
+      comparison: selectedTools.map(tool => ({
+        tool: tool.name,
+        pros: [
+          `Rated ${tool.rating}/5`,
+          tool.bestFor ? `Best for: ${tool.bestFor}` : 'Versatile AI tool',
+          tool.pricing === 'Free' ? 'Completely free to use' : tool.pricing === 'Freemium' ? 'Free tier available' : 'Full-featured premium tool',
+        ],
+        cons: [
+          tool.pricing === 'Premium' ? 'Requires paid subscription' : 'Advanced features may require upgrade',
+          tool.rating < 4.8 ? 'Slightly lower community rating' : 'High demand may cause wait times',
+        ],
+        pricing: tool.pricing,
+        verdict: `${tool.name} is a strong choice${tool.bestFor ? ` for ${tool.bestFor.toLowerCase()}` : ''}.`,
+      })),
+      winner: winner.name,
+      winnerReason: `Highest rated (${winner.rating}/5) with ${winner.pricing.toLowerCase()} pricing${winner.bestFor ? `, excelling at ${winner.bestFor.toLowerCase()}` : ''}.`,
+    };
+  }
+
   const handleCompare = useCallback(async () => {
-    if (!user || compareSelected.length < 2 || compareLoading) return;
-    const canSearch = await hasCredits(user.uid);
-    if (!canSearch) return;
+    if (!user || compareSelected.length < 2 || compareLoading || credits <= 0) return;
 
     setCompareLoading(true);
-    try {
-      const result = await callGeminiCompareAPI(compareSelected, query, userRole);
-      const newCredits = await useCredit(user.uid);
-      setCredits(newCredits);
-      setComparisonData(result);
-    } catch {
-      // Comparison failed — silently ignore
-    }
+
+    // Show local comparison instantly
+    const localComparison = buildLocalComparison(compareSelected);
+    setComparisonData(localComparison);
+    setCredits(prev => { const n = prev - 1; return n >= 0 ? n : 0; });
+    useCredit(user.uid).catch(() => {});
+
+    // Try upgrading with Gemini in background
+    callGeminiCompareAPI(compareSelected, query, userRole)
+      .then(result => {
+        if (result?.comparison) setComparisonData(result);
+      })
+      .catch(() => {});
+
     setCompareLoading(false);
-  }, [user, compareSelected, query, userRole, compareLoading]);
+  }, [user, compareSelected, query, userRole, compareLoading, credits]);
 
   // Navigation helpers
   const navigateToSearch = useCallback((searchQuery) => {
@@ -341,38 +435,57 @@ export default function App() {
         currentPage={page}
         searchHistory={searchHistory}
         onHistorySelect={navigateToSearch}
+        mode={mode}
+        onModeChange={setMode}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
-      <CategoryChips activeChip={activeChip} onChipClick={handleChipClick} />
+      {mode === 'find' && (
+        <>
+          <div className="home-content">
+            <CategoryChips activeChip={activeChip} onChipClick={handleChipClick} />
 
-      <main className="search-wrapper">
-        <SearchBox
-          query={query}
-          setQuery={setQuery}
-          onSearch={handleSearch}
-          isLoading={status === 'loading'}
-          disabled={credits <= 0}
+            <main className="search-wrapper">
+              <SearchBox
+                query={query}
+                setQuery={setQuery}
+                onSearch={handleSearch}
+                isLoading={status === 'loading' || status === 'analyzing'}
+                disabled={credits <= 0}
+              />
+              <QuickFilters filters={filters} setFilters={setFilters} />
+            </main>
+          </div>
+
+          <ResultsSection
+            status={status}
+            tools={tools}
+            summary={summary}
+            errorType={errorType}
+            isFallback={isFallback}
+            onRetry={handleRetry}
+            onFallback={handleFallback}
+            onShowMore={handleShowMore}
+            showMoreLoading={showMoreLoading}
+            credits={credits}
+            bookmarkedNames={bookmarkedNames}
+            onToggleBookmark={handleToggleBookmark}
+            compareSelected={compareSelected}
+            onToggleCompare={handleToggleCompare}
+            onCompare={handleCompare}
+            compareLoading={compareLoading}
+            noMoreTools={false}
+          />
+        </>
+      )}
+
+      {mode === 'workflow' && (
+        <WorkflowSection
+          credits={credits}
+          bookmarkedNames={bookmarkedNames}
+          onToggleBookmark={handleToggleBookmark}
         />
-        <QuickFilters filters={filters} setFilters={setFilters} />
-      </main>
-
-      <ResultsSection
-        status={status}
-        tools={tools}
-        summary={summary}
-        errorType={errorType}
-        isFallback={isFallback}
-        onRetry={handleRetry}
-        onFallback={handleFallback}
-        onShowMore={handleShowMore}
-        showMoreLoading={showMoreLoading}
-        credits={credits}
-        bookmarkedNames={bookmarkedNames}
-        onToggleBookmark={handleToggleBookmark}
-        compareSelected={compareSelected}
-        onToggleCompare={handleToggleCompare}
-        onCompare={handleCompare}
-        compareLoading={compareLoading}
-      />
+      )}
 
       {showBookmarks && (
         <BookmarksPanel

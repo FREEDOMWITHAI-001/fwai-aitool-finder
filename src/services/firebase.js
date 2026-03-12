@@ -35,7 +35,7 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 const rtdb = getDatabase(app);
 
-const INITIAL_CREDITS = 50;
+const INITIAL_CREDITS = 1000;
 
 // ---- localStorage fallback for credits ----
 
@@ -93,6 +93,7 @@ export function onAuthChange(callback) {
 // RTDB uses WebSocket to project-specific domain, bypasses ad blockers
 
 export async function getCredits(uid) {
+  const local = getLocalCredits(uid);
   try {
     const snap = await get(ref(rtdb, `users/${uid}/credits`));
     if (!snap.exists()) {
@@ -104,29 +105,50 @@ export async function getCredits(uid) {
       setLocalCredits(uid, INITIAL_CREDITS);
       return INITIAL_CREDITS;
     }
-    const credits = snap.val() ?? 0;
-    setLocalCredits(uid, credits);
-    return credits;
+    const firebaseCredits = snap.val() ?? 0;
+    // Use whichever is lower (more deductions applied) to avoid resetting
+    const resolved = Math.min(local, firebaseCredits);
+    setLocalCredits(uid, resolved);
+    // If localStorage had more deductions, push that to Firebase
+    if (local < firebaseCredits) {
+      update(ref(rtdb, `users/${uid}`), { credits: resolved }).catch(() => {});
+    }
+    return resolved;
   } catch {
-    return getLocalCredits(uid);
+    return local;
+  }
+}
+
+// One-time top-up for existing users — call only on login
+export async function topUpCreditsOnce(uid) {
+  const topUpKey = `aitf_topup_v3_${uid}`;
+  if (localStorage.getItem(topUpKey)) return null; // already done
+  try {
+    await update(ref(rtdb, `users/${uid}`), { credits: INITIAL_CREDITS });
+    setLocalCredits(uid, INITIAL_CREDITS);
+    localStorage.setItem(topUpKey, 'done');
+    return INITIAL_CREDITS;
+  } catch {
+    setLocalCredits(uid, INITIAL_CREDITS);
+    localStorage.setItem(topUpKey, 'done');
+    return INITIAL_CREDITS;
   }
 }
 
 export async function useCredit(uid) {
+  // Deduct locally first (source of truth for UI)
+  const current = getLocalCredits(uid);
+  if (current <= 0) return 0;
+  const newBalance = current - 1;
+  setLocalCredits(uid, newBalance);
+
+  // Sync to Firebase atomically — don't read back (avoids overwriting localStorage)
   try {
-    const current = await getCredits(uid);
-    if (current <= 0) return 0;
-    const newBalance = current - 1;
-    await update(ref(rtdb, `users/${uid}`), { credits: newBalance });
-    setLocalCredits(uid, newBalance);
-    return newBalance;
+    await update(ref(rtdb, `users/${uid}`), { credits: increment(-1) });
   } catch {
-    const current = getLocalCredits(uid);
-    if (current <= 0) return 0;
-    const newBalance = current - 1;
-    setLocalCredits(uid, newBalance);
-    return newBalance;
+    // Firebase failed — localStorage already has the correct value
   }
+  return newBalance;
 }
 
 export async function hasCredits(uid) {
@@ -165,21 +187,29 @@ function encodeKey(str) {
 }
 
 export async function saveSearchHistory(uid, queryText) {
+  // Always save to localStorage first
+  const localKey = `aitf_history_${uid}`;
+  const stored = JSON.parse(localStorage.getItem(localKey) || '[]');
+  const filtered = stored.filter(h => (h.query || h) !== queryText);
+  filtered.push({ query: queryText, timestamp: Date.now() });
+  while (filtered.length > MAX_HISTORY) filtered.shift();
+  localStorage.setItem(localKey, JSON.stringify(filtered));
+
+  // Also save to Firebase
   try {
     const histRef = ref(rtdb, `users/${uid}/searchHistory`);
     const snap = await get(histRef);
     const entries = snap.exists() ? snap.val() : {};
 
-    // Deduplicate: remove existing entry with same query
     for (const [key, val] of Object.entries(entries)) {
       if (val.query === queryText) {
         await remove(ref(rtdb, `users/${uid}/searchHistory/${key}`));
-        delete entries[key];
       }
     }
 
-    // Trim to MAX_HISTORY - 1 (making room for new one)
-    const sorted = Object.entries(entries).sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const sorted = Object.entries(entries)
+      .filter(([, val]) => val.query !== queryText)
+      .sort((a, b) => a[1].timestamp - b[1].timestamp);
     while (sorted.length >= MAX_HISTORY) {
       const [oldKey] = sorted.shift();
       await remove(ref(rtdb, `users/${uid}/searchHistory/${oldKey}`));
@@ -190,26 +220,26 @@ export async function saveSearchHistory(uid, queryText) {
       timestamp: Date.now(),
     });
   } catch {
-    // Fallback: store in localStorage
-    const key = `aitf_history_${uid}`;
-    const stored = JSON.parse(localStorage.getItem(key) || '[]');
-    const filtered = stored.filter(h => h.query !== queryText);
-    filtered.push({ query: queryText, timestamp: Date.now() });
-    while (filtered.length > MAX_HISTORY) filtered.shift();
-    localStorage.setItem(key, JSON.stringify(filtered));
+    // localStorage already has it
   }
 }
 
 export async function getSearchHistory(uid) {
+  const localKey = `aitf_history_${uid}`;
   try {
     const snap = await get(ref(rtdb, `users/${uid}/searchHistory`));
-    if (!snap.exists()) return [];
+    if (!snap.exists()) {
+      // Firebase empty — use localStorage
+      const stored = JSON.parse(localStorage.getItem(localKey) || '[]');
+      return stored.sort((a, b) => b.timestamp - a.timestamp).map(e => e.query || e);
+    }
     const entries = Object.values(snap.val());
+    // Sync Firebase data to localStorage
+    localStorage.setItem(localKey, JSON.stringify(entries));
     return entries.sort((a, b) => b.timestamp - a.timestamp).map(e => e.query);
   } catch {
-    const key = `aitf_history_${uid}`;
-    const stored = JSON.parse(localStorage.getItem(key) || '[]');
-    return stored.sort((a, b) => b.timestamp - a.timestamp).map(e => e.query);
+    const stored = JSON.parse(localStorage.getItem(localKey) || '[]');
+    return stored.sort((a, b) => b.timestamp - a.timestamp).map(e => e.query || e);
   }
 }
 
@@ -217,44 +247,61 @@ export async function getSearchHistory(uid) {
 
 export async function saveBookmark(uid, tool) {
   const encoded = encodeKey(tool.name);
+  const bookmarkData = {
+    name: tool.name,
+    url: tool.url,
+    rating: tool.rating || 0,
+    ratingSource: tool.ratingSource || '',
+    pricing: tool.pricing || 'Freemium',
+    bestFor: tool.bestFor || '',
+    savedAt: Date.now(),
+  };
+
+  // Always save to localStorage for persistence
+  const key = `aitf_bookmarks_${uid}`;
+  const stored = JSON.parse(localStorage.getItem(key) || '{}');
+  stored[encoded] = bookmarkData;
+  localStorage.setItem(key, JSON.stringify(stored));
+
+  // Also save to Firebase
   try {
-    await set(ref(rtdb, `users/${uid}/bookmarks/${encoded}`), {
-      name: tool.name,
-      url: tool.url,
-      rating: tool.rating || 0,
-      ratingSource: tool.ratingSource || '',
-      pricing: tool.pricing || 'Freemium',
-      bestFor: tool.bestFor || '',
-      savedAt: Date.now(),
-    });
+    await set(ref(rtdb, `users/${uid}/bookmarks/${encoded}`), bookmarkData);
   } catch {
-    const key = `aitf_bookmarks_${uid}`;
-    const stored = JSON.parse(localStorage.getItem(key) || '{}');
-    stored[encoded] = { ...tool, savedAt: Date.now() };
-    localStorage.setItem(key, JSON.stringify(stored));
+    // localStorage already has it
   }
 }
 
 export async function removeBookmark(uid, toolName) {
   const encoded = encodeKey(toolName);
+
+  // Always remove from localStorage
+  const key = `aitf_bookmarks_${uid}`;
+  const stored = JSON.parse(localStorage.getItem(key) || '{}');
+  delete stored[encoded];
+  localStorage.setItem(key, JSON.stringify(stored));
+
+  // Also remove from Firebase
   try {
     await remove(ref(rtdb, `users/${uid}/bookmarks/${encoded}`));
   } catch {
-    const key = `aitf_bookmarks_${uid}`;
-    const stored = JSON.parse(localStorage.getItem(key) || '{}');
-    delete stored[encoded];
-    localStorage.setItem(key, JSON.stringify(stored));
+    // localStorage already updated
   }
 }
 
 export async function getBookmarks(uid) {
+  const key = `aitf_bookmarks_${uid}`;
   try {
     const snap = await get(ref(rtdb, `users/${uid}/bookmarks`));
-    if (!snap.exists()) return [];
+    if (!snap.exists()) {
+      // Firebase has none — check localStorage in case of prior offline saves
+      const stored = JSON.parse(localStorage.getItem(key) || '{}');
+      return Object.values(stored).sort((a, b) => b.savedAt - a.savedAt);
+    }
     const obj = snap.val();
+    // Sync Firebase data back to localStorage
+    localStorage.setItem(key, JSON.stringify(obj));
     return Object.values(obj).sort((a, b) => b.savedAt - a.savedAt);
   } catch {
-    const key = `aitf_bookmarks_${uid}`;
     const stored = JSON.parse(localStorage.getItem(key) || '{}');
     return Object.values(stored).sort((a, b) => b.savedAt - a.savedAt);
   }

@@ -1,8 +1,7 @@
-// In dev: proxied through Vite (/api/ai → googleapis.com) to bypass ad blockers
-// In prod: calls googleapis.com directly (deploy behind your own domain/proxy)
-const GEMINI_ENDPOINT = import.meta.env.DEV
-  ? '/api/ai'
-  : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+// Call Gemini API directly with key as query param (most reliable method)
+function getGeminiEndpoint(apiKey) {
+  return `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+}
 
 function buildPrompt(userQuery, { role = '', budget = '', teamSize = '', excludeTools = [] } = {}) {
   let context = '';
@@ -11,8 +10,9 @@ function buildPrompt(userQuery, { role = '', budget = '', teamSize = '', exclude
   if (teamSize && teamSize !== 'Solo') context += `Team size: ${teamSize}. `;
 
   let excludeClause = '';
-  if (excludeTools.length > 0) {
-    excludeClause = `\n\nIMPORTANT: Do NOT recommend these tools (already shown): ${excludeTools.join(', ')}. Recommend 3 DIFFERENT tools.`;
+  const isShowMore = excludeTools.length > 0;
+  if (isShowMore) {
+    excludeClause = `\n\nCRITICAL EXCLUSION LIST — You MUST NOT recommend ANY of these tools (the user has already seen them): [${excludeTools.join(', ')}].\nYou MUST recommend ${Math.min(5, 3 + Math.floor(excludeTools.length / 3))} completely DIFFERENT tools that are NOT in the exclusion list above. Think of lesser-known alternatives, niche tools, newer startups, and tools from different ecosystems. Be creative and diverse in your recommendations.`;
   }
 
   const currentDate = new Date().toISOString().split('T')[0];
@@ -56,8 +56,8 @@ Respond with a JSON object in this exact format:
 }
 
 Important rules:
-- Recommend exactly 3 tools, ranked by relevance to the use case
-- ALWAYS recommend the CURRENT best tools, not legacy/older ones. If a newer tool has surpassed an older one, recommend the newer one.
+- Recommend ${isShowMore ? 'as many tools as possible (3-5)' : 'exactly 3 tools'}, ranked by relevance to the use case
+- ALWAYS recommend the CURRENT best tools, not legacy/older ones. If a newer tool has surpassed an older one, recommend the newer one.${isShowMore ? '\n- NEVER repeat any tool from the exclusion list. Explore niche, newer, or lesser-known alternatives.' : ''}
 - Only recommend real, currently active tools with valid URLs
 - Ratings must be sourced from real review platforms (G2, Capterra, Product Hunt, TrustRadius, or Trustpilot)
 - The "reason" field must be personalized to the user's specific use case, not generic
@@ -104,7 +104,7 @@ function validateResponse(parsed) {
 
   const validPricing = ['Free', 'Freemium', 'Premium'];
 
-  const tools = parsed.tools.slice(0, 3).map(tool => {
+  const tools = parsed.tools.slice(0, 5).map(tool => {
     let pricing = tool.pricing || 'Freemium';
     if (!validPricing.includes(pricing)) {
       const lower = pricing.toLowerCase();
@@ -134,44 +134,36 @@ function validateResponse(parsed) {
 async function geminiCall(promptText) {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
-  console.log('[Gemini] API key exists:', !!apiKey);
-  console.log('[Gemini] API key length:', apiKey ? apiKey.length : 0);
-  console.log('[Gemini] API key prefix:', apiKey ? apiKey.substring(0, 8) + '...' : 'NONE');
-  console.log('[Gemini] Endpoint:', GEMINI_ENDPOINT);
-
   if (!apiKey || apiKey.toLowerCase().includes('your_gemini_api_key')) {
-    console.error('[Gemini] API key is missing or placeholder');
     throw new Error('API_KEY_MISSING');
   }
 
-  console.log('[Gemini] Making API call...');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
 
-  const response = await fetch(GEMINI_ENDPOINT, {
+  const response = await fetch(getGeminiEndpoint(apiKey), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey,
-    },
+    headers: { 'Content-Type': 'application/json' },
+    signal: controller.signal,
     body: JSON.stringify({
       contents: [{ parts: [{ text: promptText }] }],
       generationConfig: {
         response_mime_type: 'application/json',
         temperature: 0.7,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 2048,
       },
     }),
   });
 
-  console.log('[Gemini] Response status:', response.status);
+  clearTimeout(timeout);
 
   if (!response.ok) {
     const errorBody = await response.text();
-    console.error('[Gemini] Error response:', errorBody);
+    console.error('[Gemini] Error:', response.status, errorBody);
     throw new Error(`API_ERROR_${response.status}`);
   }
 
   const data = await response.json();
-  console.log('[Gemini] Response received successfully');
 
   if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
     console.error('[Gemini] Invalid response structure:', JSON.stringify(data));
