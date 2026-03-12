@@ -87,26 +87,30 @@ export default function App() {
         const cachedRole = localStorage.getItem(`aitf_role_${uid}`) || '';
         const cachedHistory = JSON.parse(localStorage.getItem(`aitf_history_${uid}`) || '[]');
         const cachedBookmarks = JSON.parse(localStorage.getItem(`aitf_bookmarks_${uid}`) || '{}');
+        const parsedHistory = Array.isArray(cachedHistory) ? cachedHistory.map(h => h.query || h) : [];
+        const parsedBookmarks = Object.values(cachedBookmarks);
         setCredits(cachedCredits);
         setUserRole(cachedRole);
-        setSearchHistoryState(Array.isArray(cachedHistory) ? cachedHistory.map(h => h.query || h) : []);
-        setBookmarks(Object.values(cachedBookmarks));
+        setSearchHistoryState(parsedHistory);
+        setBookmarks(parsedBookmarks);
         setAuthLoading(false);
 
-        // One-time top-up for existing users first, then fetch fresh data
-        topUpCreditsOnce(uid).then(() => {
-          return Promise.all([
-            getCredits(uid),
-            getUserRole(uid),
-            getSearchHistory(uid),
-            getBookmarks(uid),
-          ]);
-        }).then(([c, role, hist, bm]) => {
+        // One-time top-up — runs independently, doesn't block data loading
+        topUpCreditsOnce(uid).catch(() => {});
+
+        // Load fresh data from Firebase — each call has its own fallback
+        // so one failure doesn't prevent the others from loading
+        Promise.all([
+          getCredits(uid).catch(() => cachedCredits),
+          getUserRole(uid).catch(() => cachedRole),
+          getSearchHistory(uid).catch(() => parsedHistory),
+          getBookmarks(uid).catch(() => parsedBookmarks),
+        ]).then(([c, role, hist, bm]) => {
           setCredits(c);
           setUserRole(role);
           setSearchHistoryState(hist);
           setBookmarks(bm);
-        }).catch(() => {});
+        });
       } else {
         setCredits(0);
         setUserRole('');

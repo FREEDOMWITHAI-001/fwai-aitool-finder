@@ -226,20 +226,38 @@ export async function saveSearchHistory(uid, queryText) {
 
 export async function getSearchHistory(uid) {
   const localKey = `aitf_history_${uid}`;
+  const stored = JSON.parse(localStorage.getItem(localKey) || '[]');
   try {
     const snap = await get(ref(rtdb, `users/${uid}/searchHistory`));
     if (!snap.exists()) {
-      // Firebase empty — use localStorage
-      const stored = JSON.parse(localStorage.getItem(localKey) || '[]');
-      return stored.sort((a, b) => b.timestamp - a.timestamp).map(e => e.query || e);
+      // Firebase empty — use localStorage and sync back to Firebase
+      if (stored.length > 0) {
+        const syncData = {};
+        stored.forEach((entry, i) => {
+          syncData[`entry_${i}`] = typeof entry === 'string' ? { query: entry, timestamp: Date.now() - i } : entry;
+        });
+        set(ref(rtdb, `users/${uid}/searchHistory`), syncData).catch(() => {});
+      }
+      return stored.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map(e => e.query || e);
     }
-    const entries = Object.values(snap.val());
-    // Sync Firebase data to localStorage
-    localStorage.setItem(localKey, JSON.stringify(entries));
-    return entries.sort((a, b) => b.timestamp - a.timestamp).map(e => e.query);
+    const firebaseEntries = Object.values(snap.val());
+    // Merge: combine Firebase + localStorage so no history is lost
+    const seen = new Set();
+    const merged = [];
+    for (const entry of [...firebaseEntries, ...stored]) {
+      const q = entry.query || entry;
+      if (!seen.has(q)) {
+        seen.add(q);
+        merged.push(typeof entry === 'string' ? { query: entry, timestamp: 0 } : entry);
+      }
+    }
+    merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    const trimmed = merged.slice(0, MAX_HISTORY);
+    // Sync merged data back to localStorage
+    localStorage.setItem(localKey, JSON.stringify(trimmed));
+    return trimmed.map(e => e.query || e);
   } catch {
-    const stored = JSON.parse(localStorage.getItem(localKey) || '[]');
-    return stored.sort((a, b) => b.timestamp - a.timestamp).map(e => e.query || e);
+    return stored.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map(e => e.query || e);
   }
 }
 
