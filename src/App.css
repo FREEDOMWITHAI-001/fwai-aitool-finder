@@ -751,6 +751,12 @@ button#search-btn:disabled {
   }
 }
 
+@media (min-width: 1800px) {
+  .tool-list {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
 .tool-card {
   background: var(--bg-card);
   backdrop-filter: blur(12px);
@@ -2849,6 +2855,12 @@ button#search-btn:disabled {
   }
 }
 
+@media (min-width: 1800px) {
+  .trending-tools-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
 .trending-tool-card {
   display: flex;
   flex-direction: column;
@@ -3035,6 +3047,12 @@ button#search-btn:disabled {
 @media (min-width: 1400px) {
   .explore-grid {
     grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1800px) {
+  .explore-grid {
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 

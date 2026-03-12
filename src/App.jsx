@@ -13,6 +13,7 @@ import ExplorePage from './components/ExplorePage';
 import WorkflowSection from './components/WorkflowSection';
 import CompareFloatingPopup from './components/CompareFloatingPopup';
 import { callGeminiAPI, callGeminiCompareAPI } from './services/gemini';
+import useGridColumns from './hooks/useGridColumns';
 import {
   onAuthChange, logOut, getCredits, useCredit, topUpCreditsOnce,
   getUserRole, saveSearchHistory, getSearchHistory,
@@ -40,6 +41,9 @@ export default function App() {
   const toggleTheme = useCallback(() => {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   }, []);
+
+  // Grid column detection for dynamic tool loading
+  const toolListColumns = useGridColumns('tool-list');
 
   // App state
   const [query, setQuery] = useState('');
@@ -293,9 +297,10 @@ export default function App() {
       const excludeNames = tools.map(t => t.name);
       const existingNames = new Set(tools.map(t => t.name.toLowerCase()));
 
-      // Get 2 more local results (never duplicates)
+      // Get more local results matching grid columns (never duplicates)
+      const fetchCount = toolListColumns || 2;
       const { findMoreTools } = await import('./utils/fallback');
-      const localMore = findMoreTools(query, excludeNames, 2);
+      const localMore = findMoreTools(query, excludeNames, fetchCount);
       const uniqueLocal = localMore.filter(t => !existingNames.has(t.name.toLowerCase()));
 
       if (uniqueLocal.length > 0) {
@@ -309,12 +314,12 @@ export default function App() {
             role: userRole,
             ...filters,
             excludeTools: excludeNames,
-            maxTools: 2,
+            maxTools: fetchCount,
           });
           if (result.tools && result.tools.length > 0) {
             setTools(prev => {
               const shown = new Set(prev.map(t => t.name.toLowerCase()));
-              const fresh = result.tools.filter(t => !shown.has(t.name.toLowerCase())).slice(0, 2);
+              const fresh = result.tools.filter(t => !shown.has(t.name.toLowerCase())).slice(0, fetchCount);
               return fresh.length > 0 ? [...prev, ...fresh] : prev;
             });
           }
@@ -325,7 +330,7 @@ export default function App() {
     } finally {
       setShowMoreLoading(false);
     }
-  }, [user, tools, query, userRole, filters, showMoreLoading, credits]);
+  }, [user, tools, query, userRole, filters, showMoreLoading, credits, toolListColumns]);
 
   // Keep search results cache in sync whenever tools update
   useEffect(() => {

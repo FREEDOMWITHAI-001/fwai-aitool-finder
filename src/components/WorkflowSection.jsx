@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import ToolCard from './ToolCard';
 import { getLocalWorkflow, generateWorkflowWithGemini, getToolsForCategory } from '../services/workflow';
+import useGridColumns from '../hooks/useGridColumns';
 
 const CATEGORY_ICONS = {
   video: (
@@ -61,12 +62,15 @@ export default function WorkflowSection({ credits, bookmarkedNames, onToggleBook
   const [workflow, setWorkflow] = useState(null);
   const [loading, setLoading] = useState(false);
   const [stepToolCounts, setStepToolCounts] = useState({});
+  const columns = useGridColumns('tool-list');
 
   const handleSeeMore = useCallback((stepNumber, category, currentCount) => {
-    const newCount = currentCount + 2;
-    const tools = getToolsForCategory(category, newCount);
-    setStepToolCounts(prev => ({ ...prev, [stepNumber]: tools }));
-  }, []);
+    const newCount = currentCount + columns;
+    const allTools = getToolsForCategory(category, newCount);
+    // Ensure we only show complete rows
+    const adjusted = allTools.slice(0, Math.floor(allTools.length / columns) * columns);
+    setStepToolCounts(prev => ({ ...prev, [stepNumber]: adjusted }));
+  }, [columns]);
 
   const runWorkflow = useCallback(async (query) => {
     const trimmed = query.trim();
@@ -230,7 +234,14 @@ export default function WorkflowSection({ credits, bookmarkedNames, onToggleBook
 
               {/* Tool Cards — same layout as Find Tools */}
               {step.tools.length > 0 && (() => {
-                const displayTools = stepToolCounts[step.number] || step.tools;
+                // Use dynamic column count to fill rows completely
+                const savedTools = stepToolCounts[step.number];
+                const dynamicTools = savedTools || getToolsForCategory(step.category, columns || 2);
+                // Ensure complete rows only
+                const rowAligned = dynamicTools.length >= columns
+                  ? dynamicTools.slice(0, Math.floor(dynamicTools.length / columns) * columns)
+                  : dynamicTools;
+                const displayTools = rowAligned.length > 0 ? rowAligned : dynamicTools;
                 const totalAvailable = getToolsForCategory(step.category, 100).length;
                 const hasMore = displayTools.length < totalAvailable;
                 return (

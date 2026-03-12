@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { getTrending } from '../services/firebase';
 import { getFaviconUrl } from './ToolCard';
 import tools from '../data/tools.json';
+import useGridColumns from '../hooks/useGridColumns';
 
 const CATEGORIES = ['Video', 'Coding', 'Design', 'Writing', 'Marketing', 'Audio', 'Research', 'Automation'];
 
-// Get top tools per category sorted by rating
-function getTopToolsByCategory(category, count = 4) {
+// Get top tools per category sorted by rating (fetch extra so we can slice to fit grid)
+function getTopToolsByCategory(category, count = 12) {
   return tools
     .filter(t => t.primary === category.toLowerCase())
     .sort((a, b) => b.rating - a.rating)
@@ -26,6 +27,7 @@ const DEFAULT_QUERIES = [
 
 export default function TrendingPage({ onSearchQuery, onBack }) {
   const [queries, setQueries] = useState(DEFAULT_QUERIES);
+  const columns = useGridColumns('trending-tools-grid');
 
   useEffect(() => {
     getTrending().then(data => {
@@ -53,7 +55,11 @@ export default function TrendingPage({ onSearchQuery, onBack }) {
       </h2>
 
       {CATEGORIES.map(category => {
-        const topTools = getTopToolsByCategory(category);
+        const allTools = getTopToolsByCategory(category);
+        // Slice to fill complete rows only (max 2 rows)
+        const maxItems = columns * 2;
+        const available = Math.min(allTools.length, maxItems);
+        const topTools = allTools.slice(0, Math.floor(available / columns) * columns);
         if (topTools.length === 0) return null;
         return (
           <div key={category} className="trending-category-section">
