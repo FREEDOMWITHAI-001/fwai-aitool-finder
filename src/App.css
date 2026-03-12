@@ -420,15 +420,6 @@ h1 {
   letter-spacing: -0.02em;
 }
 
-/* When h1 is used standalone without header-brand wrapper */
-.header-logo-clickable {
-  cursor: pointer;
-  transition: opacity var(--transition);
-}
-.header-logo-clickable:hover {
-  opacity: 0.85;
-}
-
 .brand-label {
   color: var(--text-dim);
   font-size: 0.78rem;
@@ -520,9 +511,8 @@ h1 {
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.5rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
   width: 100%;
-  max-width: 860px;
 }
 
 .chip {
@@ -559,8 +549,7 @@ h1 {
 
 .search-wrapper {
   width: 100%;
-  max-width: 860px;
-  margin: 0 auto 2.5rem;
+  margin: 0 auto 1.5rem;
   position: relative;
 }
 
@@ -751,8 +740,7 @@ button#search-btn:disabled {
 }
 
 .tool-list > .tool-card {
-  flex: 1 1 320px;
-  max-width: 100%;
+  flex: 1 1 340px;
 }
 
 .tool-card {
@@ -1530,7 +1518,7 @@ button#search-btn:disabled {
 
 /* Workflow Input */
 .workflow-input-wrapper {
-  max-width: 700px;
+  width: 100%;
   margin: 0 auto 2rem;
 }
 
@@ -1780,6 +1768,7 @@ button#search-btn:disabled {
   line-height: 1.6;
 }
 
+/* Legacy nav-link kept for trending/explore page back buttons */
 .header-nav {
   display: flex;
   align-items: center;
@@ -2805,7 +2794,7 @@ button#search-btn:disabled {
 
 @media (max-width: 768px) {
   .container {
-    padding: 1rem 0.5rem;
+    padding: 1rem 0.75rem;
   }
 
   .header-top {
@@ -2823,8 +2812,8 @@ button#search-btn:disabled {
     font-size: 0.78rem;
   }
 
-  .tool-list {
-    grid-template-columns: 1fr;
+  .tool-list > .tool-card {
+    flex: 1 1 100%;
   }
 
   .tool-card {

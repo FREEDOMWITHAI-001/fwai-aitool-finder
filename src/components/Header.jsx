@@ -45,7 +45,6 @@ export default function Header({
 
           {menuOpen && (
             <div className="hamburger-menu">
-              {/* User avatar & email */}
               <div className="menu-user-info">
                 <div className="menu-avatar">
                   {userEmail ? userEmail.charAt(0).toUpperCase() : 'U'}
@@ -57,7 +56,6 @@ export default function Header({
 
               <div className="menu-divider" />
 
-              {/* Profile */}
               <button
                 className="menu-item"
                 onClick={() => { onProfileClick(); setMenuOpen(false); }}
@@ -69,7 +67,6 @@ export default function Header({
                 Profile
               </button>
 
-              {/* Bookmarks */}
               <button
                 className="menu-item"
                 onClick={() => { onBookmarksClick(); setMenuOpen(false); }}
@@ -81,7 +78,6 @@ export default function Header({
                 {bookmarkCount > 0 && <span className="menu-badge">{bookmarkCount}</span>}
               </button>
 
-              {/* Theme Toggle */}
               <div className="theme-toggle-row">
                 <span className="theme-toggle-label">
                   {theme === 'dark' ? (
@@ -109,7 +105,6 @@ export default function Header({
 
               <div className="menu-divider" />
 
-              {/* Sign Out */}
               <button
                 className="menu-item menu-item-danger"
                 onClick={() => { onLogout(); setMenuOpen(false); }}
