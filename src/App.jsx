@@ -224,9 +224,14 @@ export default function App() {
     // Show analyzing message briefly
     await new Promise(resolve => setTimeout(resolve, 1500));
 
-    // Show category-filtered local results
+    // Show category-filtered local results, trimmed to complete rows
     const localResults = findLocalRecommendations(trimmed);
-    setTools(localResults);
+    const cols = toolListColumns || 3;
+    const rem = localResults.length % cols;
+    const alignedResults = rem !== 0 && localResults.length > cols
+      ? localResults.slice(0, localResults.length - rem)
+      : localResults;
+    setTools(alignedResults);
     setIsFallback(true);
     setStatus('results');
 
@@ -242,8 +247,10 @@ export default function App() {
             const geminiNames = new Set(result.tools.map(t => t.name));
             const extraLocal = prev.filter(t => !geminiNames.has(t.name));
             const merged = [...result.tools, ...extraLocal];
-            // Keep even count so grid rows are always full
-            const final = merged.length % 2 !== 0 ? merged.slice(0, merged.length - 1) : merged;
+            // Trim to complete rows based on current grid columns
+            const cols = toolListColumns || 3;
+            const remainder = merged.length % cols;
+            const final = remainder !== 0 ? merged.slice(0, merged.length - remainder) : merged;
             // Update cache with better results
             const newSummary = result.summary || initialSummary;
             saveResultsToCache(trimmed, final, newSummary);
@@ -262,7 +269,7 @@ export default function App() {
     });
     saveSearchHistory(user.uid, trimmed).catch(() => {});
     trackSearch(trimmed, inferCategory(trimmed));
-  }, [user, credits, userRole, filters, getCachedResults, saveResultsToCache]);
+  }, [user, credits, userRole, filters, getCachedResults, saveResultsToCache, toolListColumns]);
 
   const handleSearch = useCallback(() => {
     performSearch(query);
@@ -282,11 +289,15 @@ export default function App() {
     const trimmed = query.trim();
     if (!trimmed) return;
     const localResults = findLocalRecommendations(trimmed);
-    setTools(localResults);
+    // Trim to complete rows
+    const cols = toolListColumns || 3;
+    const r = localResults.length % cols;
+    const aligned = r !== 0 ? localResults.slice(0, localResults.length - r) : localResults;
+    setTools(aligned.length > 0 ? aligned : localResults);
     setSummary('');
     setIsFallback(true);
     setStatus('results');
-  }, [query]);
+  }, [query, toolListColumns]);
 
   // Show More
   const handleShowMore = useCallback(async () => {
@@ -297,14 +308,23 @@ export default function App() {
       const excludeNames = tools.map(t => t.name);
       const existingNames = new Set(tools.map(t => t.name.toLowerCase()));
 
-      // Get more local results matching grid columns (never duplicates)
-      const fetchCount = toolListColumns || 2;
+      // Calculate how many tools needed to complete the next full row
+      const cols = toolListColumns || 3;
+      const currentTotal = tools.length;
+      const remainder = currentTotal % cols;
+      // If partial row exists, fill it; otherwise fetch a full new row
+      const fetchCount = remainder === 0 ? cols : cols - remainder;
       const { findMoreTools } = await import('./utils/fallback');
       const localMore = findMoreTools(query, excludeNames, fetchCount);
       const uniqueLocal = localMore.filter(t => !existingNames.has(t.name.toLowerCase()));
 
       if (uniqueLocal.length > 0) {
-        setTools(prev => [...prev, ...uniqueLocal]);
+        setTools(prev => {
+          const updated = [...prev, ...uniqueLocal];
+          // Ensure total is always a multiple of columns
+          const r = updated.length % cols;
+          return r !== 0 ? updated.slice(0, updated.length - r) : updated;
+        });
         setCredits(prev => { const n = prev - 1; return n >= 0 ? n : 0; });
         useCredit(user.uid).catch(() => {});
       } else {
@@ -320,7 +340,11 @@ export default function App() {
             setTools(prev => {
               const shown = new Set(prev.map(t => t.name.toLowerCase()));
               const fresh = result.tools.filter(t => !shown.has(t.name.toLowerCase())).slice(0, fetchCount);
-              return fresh.length > 0 ? [...prev, ...fresh] : prev;
+              if (fresh.length === 0) return prev;
+              const updated = [...prev, ...fresh];
+              // Ensure total is always a multiple of columns
+              const r = updated.length % cols;
+              return r !== 0 ? updated.slice(0, updated.length - r) : updated;
             });
           }
         } catch {
