@@ -7,15 +7,20 @@ import {
   onAuthStateChanged,
 } from 'firebase/auth';
 import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  increment as fsIncrement,
+} from 'firebase/firestore';
+import {
   getDatabase,
   ref,
   get,
   set,
   update,
   push,
-  query,
-  orderByChild,
-  limitToLast,
   remove,
   increment,
 } from 'firebase/database';
@@ -33,52 +38,48 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+const db = getFirestore(app);
 const rtdb = getDatabase(app);
 
 const INITIAL_CREDITS = 1000;
 
-// ---- localStorage fallback for credits ----
+// ---- localStorage helpers ----
 
-function localKey(uid) {
-  return `aitf_credits_${uid}`;
+function setLocalCredits(uid, value) {
+  localStorage.setItem(`aitf_credits_${uid}`, String(value));
 }
 
 function getLocalCredits(uid) {
-  const stored = localStorage.getItem(localKey(uid));
-  if (stored === null) {
-    localStorage.setItem(localKey(uid), String(INITIAL_CREDITS));
-    return INITIAL_CREDITS;
-  }
-  return parseInt(stored, 10);
-}
-
-function setLocalCredits(uid, value) {
-  localStorage.setItem(localKey(uid), String(value));
+  const v = localStorage.getItem(`aitf_credits_${uid}`);
+  return v !== null ? parseInt(v, 10) : null;
 }
 
 // ---- Auth helpers ----
 
 export async function signUp(email, password, role = '') {
-  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-  const uid = userCredential.user.uid;
+  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  const uid = cred.user.uid;
+
+  // Write to Firestore (the actual database that works)
   try {
-    await set(ref(rtdb, `users/${uid}`), {
+    await setDoc(doc(db, 'users', uid), {
       email,
       credits: INITIAL_CREDITS,
       role,
       createdAt: new Date().toISOString(),
     });
-  } catch {
-    // RTDB blocked — localStorage will handle credits
+  } catch (e) {
+    console.error('Firestore signUp write failed:', e);
   }
+
   setLocalCredits(uid, INITIAL_CREDITS);
   if (role) localStorage.setItem(`aitf_role_${uid}`, role);
-  return userCredential.user;
+  return cred.user;
 }
 
 export async function logIn(email, password) {
-  const userCredential = await signInWithEmailAndPassword(auth, email, password);
-  return userCredential.user;
+  const cred = await signInWithEmailAndPassword(auth, email, password);
+  return cred.user;
 }
 
 export async function logOut() {
@@ -89,79 +90,79 @@ export function onAuthChange(callback) {
   return onAuthStateChanged(auth, callback);
 }
 
-// ---- Credits (Realtime Database with localStorage fallback) ----
-// RTDB uses WebSocket to project-specific domain, bypasses ad blockers
+// ---- Credits (Firestore = source of truth, localStorage = fast cache) ----
 
 export async function getCredits(uid) {
-  const local = getLocalCredits(uid);
   try {
-    const snap = await get(ref(rtdb, `users/${uid}/credits`));
+    const snap = await getDoc(doc(db, 'users', uid));
+
     if (!snap.exists()) {
-      // First-time user — initialize
-      await set(ref(rtdb, `users/${uid}`), {
+      // User doc doesn't exist in Firestore — create it with 1000 credits
+      // This handles existing auth users who never had a Firestore doc
+      await setDoc(doc(db, 'users', uid), {
         credits: INITIAL_CREDITS,
         createdAt: new Date().toISOString(),
       });
       setLocalCredits(uid, INITIAL_CREDITS);
       return INITIAL_CREDITS;
     }
-    const firebaseCredits = snap.val() ?? 0;
-    // Use whichever is lower (more deductions applied) to avoid resetting
-    const resolved = Math.min(local, firebaseCredits);
-    setLocalCredits(uid, resolved);
-    // If localStorage had more deductions, push that to Firebase
-    if (local < firebaseCredits) {
-      update(ref(rtdb, `users/${uid}`), { credits: resolved }).catch(() => {});
-    }
-    return resolved;
-  } catch {
-    return local;
-  }
-}
 
-// One-time top-up for existing users — call only on login
-export async function topUpCreditsOnce(uid) {
-  const topUpKey = `aitf_topup_v3_${uid}`;
-  if (localStorage.getItem(topUpKey)) return null; // already done
-  try {
-    await update(ref(rtdb, `users/${uid}`), { credits: INITIAL_CREDITS });
-    setLocalCredits(uid, INITIAL_CREDITS);
-    localStorage.setItem(topUpKey, 'done');
-    return INITIAL_CREDITS;
-  } catch {
-    setLocalCredits(uid, INITIAL_CREDITS);
-    localStorage.setItem(topUpKey, 'done');
-    return INITIAL_CREDITS;
+    const data = snap.data();
+    const credits = typeof data.credits === 'number' ? data.credits : INITIAL_CREDITS;
+
+    // If credits field was missing/corrupted, fix it in Firestore
+    if (typeof data.credits !== 'number') {
+      await updateDoc(doc(db, 'users', uid), { credits: INITIAL_CREDITS });
+    }
+
+    setLocalCredits(uid, credits);
+    return credits;
+  } catch (e) {
+    console.error('getCredits Firestore failed:', e);
+    // Firestore failed — use localStorage cache
+    const local = getLocalCredits(uid);
+    return local !== null ? local : INITIAL_CREDITS;
   }
 }
 
 export async function useCredit(uid) {
-  // Deduct locally first (source of truth for UI)
-  const current = getLocalCredits(uid);
+  // Update localStorage immediately for instant UI
+  const cached = getLocalCredits(uid);
+  const current = cached !== null ? cached : 0;
   if (current <= 0) return 0;
-  const newBalance = current - 1;
-  setLocalCredits(uid, newBalance);
+  const newLocal = current - 1;
+  setLocalCredits(uid, newLocal);
 
-  // Sync to Firebase atomically — don't read back (avoids overwriting localStorage)
+  // Deduct atomically in Firestore
   try {
-    await update(ref(rtdb, `users/${uid}`), { credits: increment(-1) });
-  } catch {
-    // Firebase failed — localStorage already has the correct value
+    await updateDoc(doc(db, 'users', uid), { credits: fsIncrement(-1) });
+    // Read back the server value (true cross-device balance)
+    const snap = await getDoc(doc(db, 'users', uid));
+    if (snap.exists()) {
+      const serverCredits = snap.data().credits;
+      if (typeof serverCredits === 'number') {
+        setLocalCredits(uid, serverCredits);
+        return serverCredits;
+      }
+    }
+  } catch (e) {
+    console.error('useCredit Firestore failed:', e);
   }
-  return newBalance;
+
+  return newLocal;
 }
 
 export async function hasCredits(uid) {
-  const credits = await getCredits(uid);
-  return credits > 0;
+  const c = await getCredits(uid);
+  return c > 0;
 }
 
-// ---- Role / Profile ----
+// ---- Role / Profile (Firestore) ----
 
 export async function getUserRole(uid) {
   try {
-    const snap = await get(ref(rtdb, `users/${uid}/role`));
-    const role = snap.exists() ? snap.val() : '';
+    const snap = await getDoc(doc(db, 'users', uid));
+    const role = snap.exists() ? (snap.data().role || '') : '';
     if (role) localStorage.setItem(`aitf_role_${uid}`, role);
     return role;
   } catch {
@@ -171,14 +172,12 @@ export async function getUserRole(uid) {
 
 export async function updateUserRole(uid, role) {
   try {
-    await update(ref(rtdb, `users/${uid}`), { role });
-  } catch {
-    // fallback
-  }
+    await updateDoc(doc(db, 'users', uid), { role });
+  } catch { /* fallback */ }
   localStorage.setItem(`aitf_role_${uid}`, role);
 }
 
-// ---- Search History ----
+// ---- Search History (localStorage + RTDB best-effort) ----
 
 const MAX_HISTORY = 15;
 
@@ -187,26 +186,22 @@ function encodeKey(str) {
 }
 
 export async function saveSearchHistory(uid, queryText) {
-  // Always save to localStorage first
-  const localKey = `aitf_history_${uid}`;
-  const stored = JSON.parse(localStorage.getItem(localKey) || '[]');
+  const lk = `aitf_history_${uid}`;
+  const stored = JSON.parse(localStorage.getItem(lk) || '[]');
   const filtered = stored.filter(h => (h.query || h) !== queryText);
   filtered.push({ query: queryText, timestamp: Date.now() });
   while (filtered.length > MAX_HISTORY) filtered.shift();
-  localStorage.setItem(localKey, JSON.stringify(filtered));
+  localStorage.setItem(lk, JSON.stringify(filtered));
 
-  // Also save to Firebase
   try {
     const histRef = ref(rtdb, `users/${uid}/searchHistory`);
     const snap = await get(histRef);
     const entries = snap.exists() ? snap.val() : {};
-
     for (const [key, val] of Object.entries(entries)) {
       if (val.query === queryText) {
         await remove(ref(rtdb, `users/${uid}/searchHistory/${key}`));
       }
     }
-
     const sorted = Object.entries(entries)
       .filter(([, val]) => val.query !== queryText)
       .sort((a, b) => a[1].timestamp - b[1].timestamp);
@@ -214,37 +209,25 @@ export async function saveSearchHistory(uid, queryText) {
       const [oldKey] = sorted.shift();
       await remove(ref(rtdb, `users/${uid}/searchHistory/${oldKey}`));
     }
-
     await push(ref(rtdb, `users/${uid}/searchHistory`), {
       query: queryText,
       timestamp: Date.now(),
     });
-  } catch {
-    // localStorage already has it
-  }
+  } catch { /* localStorage already has it */ }
 }
 
 export async function getSearchHistory(uid) {
-  const localKey = `aitf_history_${uid}`;
-  const stored = JSON.parse(localStorage.getItem(localKey) || '[]');
+  const lk = `aitf_history_${uid}`;
+  const stored = JSON.parse(localStorage.getItem(lk) || '[]');
   try {
     const snap = await get(ref(rtdb, `users/${uid}/searchHistory`));
     if (!snap.exists()) {
-      // Firebase empty — use localStorage and sync back to Firebase
-      if (stored.length > 0) {
-        const syncData = {};
-        stored.forEach((entry, i) => {
-          syncData[`entry_${i}`] = typeof entry === 'string' ? { query: entry, timestamp: Date.now() - i } : entry;
-        });
-        set(ref(rtdb, `users/${uid}/searchHistory`), syncData).catch(() => {});
-      }
       return stored.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map(e => e.query || e);
     }
-    const firebaseEntries = Object.values(snap.val());
-    // Merge: combine Firebase + localStorage so no history is lost
+    const fbEntries = Object.values(snap.val());
     const seen = new Set();
     const merged = [];
-    for (const entry of [...firebaseEntries, ...stored]) {
+    for (const entry of [...fbEntries, ...stored]) {
       const q = entry.query || entry;
       if (!seen.has(q)) {
         seen.add(q);
@@ -253,15 +236,14 @@ export async function getSearchHistory(uid) {
     }
     merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     const trimmed = merged.slice(0, MAX_HISTORY);
-    // Sync merged data back to localStorage
-    localStorage.setItem(localKey, JSON.stringify(trimmed));
+    localStorage.setItem(lk, JSON.stringify(trimmed));
     return trimmed.map(e => e.query || e);
   } catch {
     return stored.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map(e => e.query || e);
   }
 }
 
-// ---- Bookmarks ----
+// ---- Bookmarks (localStorage + RTDB best-effort) ----
 
 export async function saveBookmark(uid, tool) {
   const encoded = encodeKey(tool.name);
@@ -275,35 +257,26 @@ export async function saveBookmark(uid, tool) {
     savedAt: Date.now(),
   };
 
-  // Always save to localStorage for persistence
   const key = `aitf_bookmarks_${uid}`;
   const stored = JSON.parse(localStorage.getItem(key) || '{}');
   stored[encoded] = bookmarkData;
   localStorage.setItem(key, JSON.stringify(stored));
 
-  // Also save to Firebase
   try {
     await set(ref(rtdb, `users/${uid}/bookmarks/${encoded}`), bookmarkData);
-  } catch {
-    // localStorage already has it
-  }
+  } catch { /* localStorage has it */ }
 }
 
 export async function removeBookmark(uid, toolName) {
   const encoded = encodeKey(toolName);
-
-  // Always remove from localStorage
   const key = `aitf_bookmarks_${uid}`;
   const stored = JSON.parse(localStorage.getItem(key) || '{}');
   delete stored[encoded];
   localStorage.setItem(key, JSON.stringify(stored));
 
-  // Also remove from Firebase
   try {
     await remove(ref(rtdb, `users/${uid}/bookmarks/${encoded}`));
-  } catch {
-    // localStorage already updated
-  }
+  } catch { /* localStorage updated */ }
 }
 
 export async function getBookmarks(uid) {
@@ -312,27 +285,18 @@ export async function getBookmarks(uid) {
   try {
     const snap = await get(ref(rtdb, `users/${uid}/bookmarks`));
     if (!snap.exists()) {
-      // Firebase has none — use localStorage and sync back to Firebase
-      if (Object.keys(stored).length > 0) {
-        set(ref(rtdb, `users/${uid}/bookmarks`), stored).catch(() => {});
-      }
       return Object.values(stored).sort((a, b) => b.savedAt - a.savedAt);
     }
-    const firebaseData = snap.val();
-    // Merge: combine Firebase + localStorage so no bookmarks are lost
-    const merged = { ...stored, ...firebaseData };
-    // Sync merged data back to both stores
+    const fbData = snap.val();
+    const merged = { ...stored, ...fbData };
     localStorage.setItem(key, JSON.stringify(merged));
-    if (Object.keys(stored).length > 0 && Object.keys(stored).some(k => !firebaseData[k])) {
-      set(ref(rtdb, `users/${uid}/bookmarks`), merged).catch(() => {});
-    }
     return Object.values(merged).sort((a, b) => b.savedAt - a.savedAt);
   } catch {
     return Object.values(stored).sort((a, b) => b.savedAt - a.savedAt);
   }
 }
 
-// ---- Trending ----
+// ---- Trending (RTDB best-effort) ----
 
 export async function trackSearch(searchQuery, category) {
   try {
@@ -348,9 +312,7 @@ export async function trackSearch(searchQuery, category) {
       count: increment(1),
       lastSearched: Date.now(),
     });
-  } catch {
-    // trending is best-effort, don't break the app
-  }
+  } catch { /* best-effort */ }
 }
 
 export async function getTrending() {

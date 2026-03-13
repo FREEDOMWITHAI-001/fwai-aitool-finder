@@ -15,7 +15,7 @@ import CompareFloatingPopup from './components/CompareFloatingPopup';
 import { callGeminiAPI, callGeminiCompareAPI } from './services/gemini';
 import useGridColumns from './hooks/useGridColumns';
 import {
-  onAuthChange, logOut, getCredits, useCredit, topUpCreditsOnce,
+  onAuthChange, logOut, getCredits, useCredit,
   getUserRole, saveSearchHistory, getSearchHistory,
   saveBookmark, removeBookmark, getBookmarks, trackSearch,
 } from './services/firebase';
@@ -81,32 +81,32 @@ export default function App() {
     const unsubscribe = onAuthChange((firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        // Show cached data instantly from localStorage
         const uid = firebaseUser.uid;
-        const cachedCredits = parseInt(localStorage.getItem(`aitf_credits_${uid}`) || '0', 10);
+
+        // Show cached data instantly from localStorage
         const cachedRole = localStorage.getItem(`aitf_role_${uid}`) || '';
         const cachedHistory = JSON.parse(localStorage.getItem(`aitf_history_${uid}`) || '[]');
         const cachedBookmarks = JSON.parse(localStorage.getItem(`aitf_bookmarks_${uid}`) || '{}');
         const parsedHistory = Array.isArray(cachedHistory) ? cachedHistory.map(h => h.query || h) : [];
         const parsedBookmarks = Object.values(cachedBookmarks);
-        setCredits(cachedCredits);
+
         setUserRole(cachedRole);
         setSearchHistoryState(parsedHistory);
         setBookmarks(parsedBookmarks);
+
+        // getCredits always returns a number (grants 1000 if first time)
+        // It reads localStorage instantly, then syncs Firebase in background
+        getCredits(uid).then(c => setCredits(c));
+
+        // App renders immediately
         setAuthLoading(false);
 
-        // One-time top-up — runs independently, doesn't block data loading
-        topUpCreditsOnce(uid).catch(() => {});
-
-        // Load fresh data from Firebase — each call has its own fallback
-        // so one failure doesn't prevent the others from loading
+        // Sync other data from Firebase in background
         Promise.all([
-          getCredits(uid).catch(() => cachedCredits),
           getUserRole(uid).catch(() => cachedRole),
           getSearchHistory(uid).catch(() => parsedHistory),
           getBookmarks(uid).catch(() => parsedBookmarks),
-        ]).then(([c, role, hist, bm]) => {
-          setCredits(c);
+        ]).then(([role, hist, bm]) => {
           setUserRole(role);
           setSearchHistoryState(hist);
           setBookmarks(bm);
@@ -203,10 +203,11 @@ export default function App() {
 
     setTools([]);
 
-    // Deduct 1 credit — update UI instantly, persist to localStorage + Firebase
-    const newCredits = credits - 1;
-    setCredits(newCredits);
-    useCredit(user.uid).catch(() => {});
+    // Deduct 1 credit — update UI optimistically, sync with Firebase
+    setCredits(prev => prev - 1);
+    useCredit(user.uid).then(serverBalance => {
+      if (typeof serverBalance === 'number') setCredits(serverBalance);
+    }).catch(() => {});
 
     const categorySummaries = {
       Video: 'These AI tools offer a powerful suite of capabilities for video creation and editing, from automated subtitle generation and visual effects to AI-driven scene composition and professional-grade post-production.',
@@ -224,9 +225,6 @@ export default function App() {
     setSummary(initialSummary);
     setIsFallback(false);
     setStatus('analyzing');
-
-    // Show analyzing message briefly
-    await new Promise(resolve => setTimeout(resolve, 1500));
 
     // Show category-filtered local results, trimmed to complete rows
     const localResults = findLocalRecommendations(trimmed);
@@ -331,8 +329,10 @@ export default function App() {
           const r = updated.length % cols;
           return r !== 0 ? updated.slice(0, updated.length - r) : updated;
         });
-        setCredits(prev => { const n = prev - 1; return n >= 0 ? n : 0; });
-        useCredit(user.uid).catch(() => {});
+        setCredits(prev => Math.max(prev - 1, 0));
+        useCredit(user.uid).then(serverBalance => {
+          if (typeof serverBalance === 'number') setCredits(serverBalance);
+        }).catch(() => {});
       } else {
         // No more local tools, try Gemini for 2 more
         try {
@@ -445,8 +445,10 @@ export default function App() {
     // Show local comparison instantly
     const localComparison = buildLocalComparison(compareSelected);
     setComparisonData(localComparison);
-    setCredits(prev => { const n = prev - 1; return n >= 0 ? n : 0; });
-    useCredit(user.uid).catch(() => {});
+    setCredits(prev => Math.max(prev - 1, 0));
+    useCredit(user.uid).then(serverBalance => {
+      if (typeof serverBalance === 'number') setCredits(serverBalance);
+    }).catch(() => {});
 
     // Try upgrading with Gemini in background
     callGeminiCompareAPI(compareSelected, query, userRole)

@@ -3215,35 +3215,124 @@ button#search-btn:disabled {
    Mobile Responsiveness
    ============================================ */
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
+  /* ---- Layout ---- */
   .container {
-    padding: 1rem 200px;
+    padding: 1rem 16px;
+    overflow-x: hidden;
+  }
+
+  /* ---- Header / Navbar ---- */
+  .header {
+    padding-top: 56px;
+    margin-bottom: 1rem;
   }
 
   .header-top {
-    padding: 0.6rem 1rem;
+    padding: 0.5rem 12px;
+  }
+
+  .header-actions {
+    gap: 0.35rem;
+  }
+
+  .header-icon-btn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .theme-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .credits-badge {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.72rem;
+  }
+
+  .credits-badge .credits-count {
+    font-size: 0.8rem;
+  }
+
+  .credits-badge .credits-label {
+    font-size: 0.65rem;
   }
 
   .hamburger-menu {
-    width: 250px;
+    width: 260px;
   }
 
-  .category-chips { gap: 0.3rem; }
+  /* ---- Brand / Hero ---- */
+  .header-center {
+    text-align: center;
+  }
+
+  .header-brand {
+    gap: 0.5rem;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  .brand-label {
+    font-size: 0.72rem;
+  }
+
+  .subtitle {
+    font-size: 0.85rem;
+    max-width: 100%;
+    padding: 0 8px;
+    text-align: center;
+  }
+
+  /* ---- Mode Toggle ---- */
+  .mode-toggle {
+    margin-top: 0.75rem;
+    width: auto;
+    max-width: 280px;
+  }
+
+  .mode-toggle-btn {
+    padding: 0.45rem 1rem;
+    font-size: 0.8rem;
+  }
+
+  /* ---- Trending / Explore Nav Buttons ---- */
+  .header-nav {
+    margin-top: 0.75rem;
+    gap: 0.5rem;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .nav-link {
+    padding: 0.5rem 1.2rem;
+    font-size: 0.82rem;
+  }
+
+  /* ---- Category Chips (2-column grid on mobile) ---- */
+  .category-chips {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
 
   .chip {
-    padding: 0.35rem 0.85rem;
-    font-size: 0.78rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    text-align: center;
+    width: 100%;
+    justify-content: center;
   }
 
-
-  .tool-card {
-    padding: 1rem;
-  }
-
+  /* ---- Search Box ---- */
   .search-container {
     flex-direction: column;
     gap: 8px;
-    padding: 8px;
+    padding: 0;
     background: transparent;
     border: none;
     backdrop-filter: none;
@@ -3253,6 +3342,7 @@ button#search-btn:disabled {
   .search-container:focus-within {
     transform: none;
     box-shadow: none;
+    border-color: transparent;
   }
 
   textarea#search-input {
@@ -3261,28 +3351,270 @@ button#search-btn:disabled {
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     width: 100%;
-    padding: 1rem;
+    padding: 0.85rem 1rem;
+    min-height: 48px;
+    max-height: 96px;
+    font-size: 0.88rem;
+    rows: 1;
   }
 
   textarea#search-input:focus {
     border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
   }
 
   button#search-btn {
     width: 100%;
-    padding: 1rem;
+    padding: 0.85rem 1rem;
+    min-height: 48px;
     border-radius: var(--radius-lg);
-    font-size: 0.92rem;
+    font-size: 0.88rem;
   }
 
-  .open-tool-btn { align-self: stretch; justify-content: center; }
-  .skeleton-card { height: 120px; }
-  .header-actions { gap: 0.4rem; }
-  .history-dropdown { min-width: 240px; right: -50px; }
-  .quick-filters { flex-direction: column; align-items: center; }
-  .bookmarks-panel { width: 100%; }
-  .comparison-modal { padding: 1rem; }
-  .comparison-grid { grid-template-columns: 1fr; }
+  /* ---- Quick Filters ---- */
+  .quick-filters {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .filter-group {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  /* ---- Tool Cards ---- */
+  .tool-list {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .tool-card {
+    padding: 1rem;
+    border-radius: var(--radius-xl);
+    width: 100%;
+  }
+
+  .tool-card-top {
+    gap: 0.75rem;
+  }
+
+  .tool-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .tool-name {
+    font-size: 0.95rem;
+  }
+
+  .tool-card-footer {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .open-tool-btn {
+    flex: 1;
+    justify-content: center;
+    min-height: 40px;
+  }
+
+  /* ---- Results Section ---- */
+  .ai-summary {
+    padding: 0.85rem 1rem;
+    font-size: 0.82rem;
+  }
+
+  .skeleton-card {
+    height: 120px;
+  }
+
+  /* ---- Workflow Section ---- */
+  .workflow-input-box {
+    flex-direction: column;
+    gap: 8px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+
+  .workflow-input-box:focus-within {
+    box-shadow: none;
+    border-color: transparent;
+  }
+
+  .workflow-input {
+    background: var(--bg-card);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    width: 100%;
+    padding: 0.85rem 1rem;
+    min-height: 48px;
+    font-size: 0.88rem;
+  }
+
+  .workflow-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  }
+
+  .workflow-generate-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 0.85rem 1rem;
+    min-height: 48px;
+    border-radius: var(--radius-lg);
+    font-size: 0.88rem;
+  }
+
+  .workflow-suggestions {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+  }
+
+  .workflow-suggestion-chip {
+    text-align: center;
+    padding: 0.45rem 0.5rem;
+    font-size: 0.76rem;
+  }
+
+  .workflow-empty {
+    margin-top: 1.5rem;
+    padding: 2rem 1rem;
+  }
+
+  .workflow-empty p {
+    font-size: 0.82rem;
+    max-width: 100%;
+  }
+
+  .workflow-goal-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .workflow-goal-header h3 {
+    font-size: 1rem;
+  }
+
+  .workflow-step-title-row {
+    gap: 0.75rem;
+  }
+
+  .workflow-step-badge {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    font-size: 0.78rem;
+  }
+
+  .workflow-step-name-row h4 {
+    font-size: 0.9rem;
+  }
+
+  .workflow-step-desc {
+    font-size: 0.82rem;
+  }
+
+  /* ---- Explore Page ---- */
+  .explore-chips {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
+  }
+
+  .explore-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .explore-card {
+    padding: 1rem;
+  }
+
+  .explore-card-top {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .explore-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .explore-similar-btn,
+  .explore-open-btn {
+    flex: 1;
+    text-align: center;
+    justify-content: center;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* ---- Trending Page ---- */
+  .page-title {
+    font-size: 1.15rem;
+  }
+
+  .page-title-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .trending-tools-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .trending-tool-card {
+    padding: 1rem;
+  }
+
+  .trending-category-header {
+    align-items: center;
+  }
+
+  .trending-queries {
+    gap: 0.35rem;
+  }
+
+  /* ---- Bookmarks Panel ---- */
+  .bookmarks-panel {
+    width: 100%;
+  }
+
+  /* ---- Comparison Modal ---- */
+  .comparison-overlay {
+    padding: 0.75rem;
+  }
+
+  .comparison-modal {
+    padding: 1rem;
+  }
+
+  .comparison-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ---- Compare Popup ---- */
+  .compare-popup {
+    bottom: 12px;
+    right: 12px;
+    left: 12px;
+    align-items: stretch;
+  }
+
+  .compare-popup-body {
+    max-width: 100%;
+    min-width: unset;
+  }
 
   .compare-float-btn {
     bottom: 1rem;
@@ -3292,5 +3624,29 @@ button#search-btn:disabled {
     width: auto;
   }
 
-  .compare-float-btn:hover:not(:disabled) { transform: none; }
+  .compare-float-btn:hover:not(:disabled) {
+    transform: none;
+  }
+
+  /* ---- Search History ---- */
+  .history-dropdown {
+    min-width: 240px;
+    right: -50px;
+  }
+
+  /* ---- Error Card ---- */
+  .error-card {
+    padding: 1.5rem 1rem;
+  }
+
+  .error-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .error-action-btn {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
 }
