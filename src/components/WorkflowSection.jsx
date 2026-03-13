@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import ToolCard from './ToolCard';
 import { getLocalWorkflow, generateWorkflowWithGemini, getToolsForCategory } from '../services/workflow';
-import { useCredit } from '../services/firebase';
+import { useCredit, logToolUsage } from '../services/firebase';
 import useGridColumns from '../hooks/useGridColumns';
 
 const WORKFLOW_CREDIT_COST = 5;
@@ -67,7 +67,7 @@ export default function WorkflowSection({ credits, setCredits, user, bookmarkedN
   const [stepToolCounts, setStepToolCounts] = useState({});
   const columns = useGridColumns('tool-list');
 
-  const handleSeeMore = useCallback((stepNumber, category, currentCount) => {
+  const handleSeeMore = useCallback(async (stepNumber, category, currentCount) => {
     if (credits < 1) return;
 
     const newCount = currentCount + columns;
@@ -80,6 +80,7 @@ export default function WorkflowSection({ credits, setCredits, user, bookmarkedN
       setStepToolCounts(prev => ({ ...prev, [stepNumber]: adjusted }));
       setCredits(prev => Math.max(prev - 1, 0));
       if (user?.uid) {
+        await logToolUsage(user.uid, 'ai_radar', 'workflow_show_more');
         useCredit(user.uid, 1).then(serverBalance => {
           if (typeof serverBalance === 'number') setCredits(serverBalance);
         }).catch(() => {});
@@ -108,6 +109,7 @@ export default function WorkflowSection({ credits, setCredits, user, bookmarkedN
     // Deduct 5 credits after workflow is successfully generated
     setCredits(prev => Math.max(prev - WORKFLOW_CREDIT_COST, 0));
     if (user?.uid) {
+      await logToolUsage(user.uid, 'ai_radar', 'workflow');
       useCredit(user.uid, WORKFLOW_CREDIT_COST).then(serverBalance => {
         if (typeof serverBalance === 'number') setCredits(serverBalance);
       }).catch(() => {});

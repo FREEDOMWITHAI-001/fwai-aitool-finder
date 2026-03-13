@@ -15,7 +15,7 @@ import CompareFloatingPopup from './components/CompareFloatingPopup';
 import { callGeminiAPI, callGeminiCompareAPI } from './services/gemini';
 import useGridColumns from './hooks/useGridColumns';
 import {
-  onAuthChange, logOut, getCredits, useCredit,
+  onAuthChange, logOut, getCredits, useCredit, logToolUsage,
   getUserRole, saveSearchHistory, getSearchHistory,
   saveBookmark, removeBookmark, getBookmarks, trackSearch,
 } from './services/firebase';
@@ -234,8 +234,9 @@ export default function App() {
     saveResultsToCache(trimmed, localResults, initialSummary);
 
     // Deduct 1 credit after local results are shown successfully
-    const deductOneCredit = () => {
+    const deductOneCredit = async () => {
       setCredits(prev => Math.max(prev - 1, 0));
+      await logToolUsage(user.uid, 'ai_radar', 'search');
       useCredit(user.uid).then(serverBalance => {
         if (typeof serverBalance === 'number') setCredits(serverBalance);
       }).catch(() => {});
@@ -359,6 +360,7 @@ export default function App() {
       // Deduct 1 credit only after tools were successfully added
       if (addedTools) {
         setCredits(prev => Math.max(prev - 1, 0));
+        await logToolUsage(user.uid, 'ai_radar', 'show_more');
         useCredit(user.uid).then(serverBalance => {
           if (typeof serverBalance === 'number') setCredits(serverBalance);
         }).catch(() => {});
@@ -459,6 +461,7 @@ export default function App() {
 
     // Deduct 1 credit after comparison is shown
     setCredits(prev => Math.max(prev - 1, 0));
+    await logToolUsage(user.uid, 'ai_radar', 'compare');
     useCredit(user.uid).then(serverBalance => {
       if (typeof serverBalance === 'number') setCredits(serverBalance);
     }).catch(() => {});

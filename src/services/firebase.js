@@ -13,6 +13,8 @@ import {
   setDoc,
   updateDoc,
   increment as fsIncrement,
+  collection,
+  addDoc,
 } from 'firebase/firestore';
 import {
   getDatabase,
@@ -155,6 +157,21 @@ export async function useCredit(uid, amount = 1) {
 export async function hasCredits(uid) {
   const c = await getCredits(uid);
   return c > 0;
+}
+
+// ---- Tool Usage Logging (Firestore → toolUsage collection) ----
+
+export async function logToolUsage(userId, toolId, action) {
+  try {
+    await addDoc(collection(db, 'toolUsage'), {
+      userId,
+      toolId,
+      action,
+      createdAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Failed to log usage:', err);
+  }
 }
 
 // ---- Role / Profile (Firestore) ----
