@@ -1,7 +1,10 @@
 import { useState, useCallback } from 'react';
 import ToolCard from './ToolCard';
 import { getLocalWorkflow, generateWorkflowWithGemini, getToolsForCategory } from '../services/workflow';
+import { useCredit } from '../services/firebase';
 import useGridColumns from '../hooks/useGridColumns';
+
+const WORKFLOW_CREDIT_COST = 5;
 
 const CATEGORY_ICONS = {
   video: (
@@ -57,7 +60,7 @@ const CATEGORY_COLORS = {
   automation: '#c084fc',
 };
 
-export default function WorkflowSection({ credits, bookmarkedNames, onToggleBookmark }) {
+export default function WorkflowSection({ credits, setCredits, user, bookmarkedNames, onToggleBookmark }) {
   const [goal, setGoal] = useState('');
   const [workflow, setWorkflow] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -75,6 +78,16 @@ export default function WorkflowSection({ credits, bookmarkedNames, onToggleBook
   const runWorkflow = useCallback(async (query) => {
     const trimmed = query.trim();
     if (!trimmed || trimmed.length < 3) return;
+
+    if (credits < WORKFLOW_CREDIT_COST) return;
+
+    // Deduct 5 credits — update UI optimistically
+    setCredits(prev => prev - WORKFLOW_CREDIT_COST);
+    if (user?.uid) {
+      useCredit(user.uid, WORKFLOW_CREDIT_COST).then(serverBalance => {
+        if (typeof serverBalance === 'number') setCredits(serverBalance);
+      });
+    }
 
     setLoading(true);
     setWorkflow(null);
@@ -97,7 +110,7 @@ export default function WorkflowSection({ credits, bookmarkedNames, onToggleBook
     } catch {
       // Local workflow already showing
     }
-  }, []);
+  }, [credits, user, setCredits]);
 
   const handleGenerate = useCallback(() => {
     if (loading) return;
@@ -133,7 +146,7 @@ export default function WorkflowSection({ credits, bookmarkedNames, onToggleBook
           <button
             className="workflow-generate-btn"
             onClick={handleGenerate}
-            disabled={credits <= 0}
+            disabled={credits < WORKFLOW_CREDIT_COST}
           >
             {loading ? (
               <span className="btn-loading">

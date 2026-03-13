@@ -125,17 +125,17 @@ export async function getCredits(uid) {
   }
 }
 
-export async function useCredit(uid) {
+export async function useCredit(uid, amount = 1) {
   // Update localStorage immediately for instant UI
   const cached = getLocalCredits(uid);
   const current = cached !== null ? cached : 0;
-  if (current <= 0) return 0;
-  const newLocal = current - 1;
+  if (current < amount) return 0;
+  const newLocal = current - amount;
   setLocalCredits(uid, newLocal);
 
   // Deduct atomically in Firestore
   try {
-    await updateDoc(doc(db, 'users', uid), { credits: fsIncrement(-1) });
+    await updateDoc(doc(db, 'users', uid), { credits: fsIncrement(-amount) });
     // Read back the server value (true cross-device balance)
     const snap = await getDoc(doc(db, 'users', uid));
     if (snap.exists()) {

@@ -1,7 +1,5 @@
-// Call Gemini API directly with key as query param (most reliable method)
-function getGeminiEndpoint(apiKey) {
-  return `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-}
+// Gemini calls go through the server-side proxy (service account auth)
+const GEMINI_PROXY = '/api/ai';
 
 function buildPrompt(userQuery, { role = '', budget = '', teamSize = '', excludeTools = [] } = {}) {
   let context = '';
@@ -132,16 +130,10 @@ function validateResponse(parsed) {
 }
 
 async function geminiCall(promptText) {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-
-  if (!apiKey || apiKey.toLowerCase().includes('your_gemini_api_key')) {
-    throw new Error('API_KEY_MISSING');
-  }
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
 
-  const response = await fetch(getGeminiEndpoint(apiKey), {
+  const response = await fetch(GEMINI_PROXY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal: controller.signal,

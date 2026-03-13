@@ -1,16 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { geminiProxyPlugin } from './server/gemini-proxy.js'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), geminiProxyPlugin()],
   server: {
     host: true,
-    proxy: {
-      '/api/ai': {
-        target: 'https://generativelanguage.googleapis.com',
-        changeOrigin: true,
-        rewrite: () => '/v1beta/models/gemini-2.0-flash:generateContent',
-      },
-    },
   },
 })

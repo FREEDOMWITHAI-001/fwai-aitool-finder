@@ -584,6 +584,8 @@ export default function App() {
       {mode === 'workflow' && (
         <WorkflowSection
           credits={credits}
+          setCredits={setCredits}
+          user={user}
           bookmarkedNames={bookmarkedNames}
           onToggleBookmark={handleToggleBookmark}
         />

@@ -149,30 +149,22 @@ Rules:
 }
 
 export async function generateWorkflowWithGemini(goal) {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey || apiKey.toLowerCase().includes('your_gemini_api_key')) {
-    throw new Error('API_KEY_MISSING');
-  }
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: buildWorkflowPrompt(goal) }] }],
-        generationConfig: {
-          response_mime_type: 'application/json',
-          temperature: 0.7,
-          maxOutputTokens: 2048,
-        },
-      }),
-    }
-  );
+  const response = await fetch('/api/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal: controller.signal,
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: buildWorkflowPrompt(goal) }] }],
+      generationConfig: {
+        response_mime_type: 'application/json',
+        temperature: 0.7,
+        maxOutputTokens: 2048,
+      },
+    }),
+  });
 
   clearTimeout(timeout);
 
