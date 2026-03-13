@@ -15,84 +15,29 @@ function buildPrompt(userQuery, { role = '', budget = '', teamSize = '', exclude
 
   const currentDate = new Date().toISOString().split('T')[0];
 
-  return `You are an AI tool recommendation expert with knowledge of the LATEST AI tools as of ${currentDate}. A user will describe their use case, and you must recommend exactly 3 AI tools that best fit their needs.
+  return `You are an AI tool expert (${currentDate}). Recommend ${isShowMore ? '3-5' : 'exactly 3'} CURRENT, best-in-market AI tools for the user's use case. Prioritize newer tools over legacy ones.
 
-CRITICAL: You must recommend the tools that are CURRENTLY the best in the market RIGHT NOW, not tools that were popular 2 years ago. The AI tool landscape changes rapidly. For example:
-- For AI coding: Cursor, Claude Code, Windsurf, Cline, Aider, and Continue are leading in 2025-2026, NOT just GitHub Copilot
-- For AI chat: Claude, ChatGPT, Gemini, Perplexity are the current leaders
-- For AI image generation: Midjourney, DALL-E 3, Flux, Ideogram, Leonardo AI are current
-- For AI video: Sora, Runway Gen-3, Kling, Pika are current
-- For AI writing: Claude, Jasper, Copy.ai, Writesonic are current
-- For AI search: Perplexity, You.com, Phind are current
-Always consider the NEWEST entrants and recent major updates, not just legacy tools.
+${context}Use case: "${userQuery}"${excludeClause}
 
-For each tool, provide:
-1. "name": The official tool name
-2. "url": The official website URL (must be a real, working URL)
-3. "rating": A rating out of 5 from a trusted review source (number, e.g. 4.8)
-4. "ratingSource": The name of the source (e.g., "G2", "Product Hunt", "Capterra", "TrustRadius", "Trustpilot")
-5. "pricing": One of exactly these values: "Free", "Freemium", "Premium"
-6. "reason": A 1-2 sentence explanation of WHY this tool is the best fit for the user's specific use case
-7. "bestFor": A short phrase describing the tool's primary strength (e.g., "AI-powered video editing")
+Return JSON: {"tools":[{"name":"","url":"","rating":4.8,"ratingSource":"G2","pricing":"Freemium","reason":"","bestFor":""}],"summary":""}
 
-${context}User's use case: "${userQuery}"${excludeClause}
-
-Respond with a JSON object in this exact format:
-{
-  "tools": [
-    {
-      "name": "Tool Name",
-      "url": "https://...",
-      "rating": 4.8,
-      "ratingSource": "G2",
-      "pricing": "Freemium",
-      "reason": "Why this tool fits the user's specific use case",
-      "bestFor": "Short strength description"
-    }
-  ],
-  "summary": "A one-sentence summary of the analysis"
-}
-
-Important rules:
-- Recommend ${isShowMore ? 'as many tools as possible (3-5)' : 'exactly 3 tools'}, ranked by relevance to the use case
-- ALWAYS recommend the CURRENT best tools, not legacy/older ones. If a newer tool has surpassed an older one, recommend the newer one.${isShowMore ? '\n- NEVER repeat any tool from the exclusion list. Explore niche, newer, or lesser-known alternatives.' : ''}
-- Only recommend real, currently active tools with valid URLs
-- Ratings must be sourced from real review platforms (G2, Capterra, Product Hunt, TrustRadius, or Trustpilot)
-- The "reason" field must be personalized to the user's specific use case, not generic
-- The "pricing" field must be exactly one of: "Free", "Freemium", "Premium"`;
+Rules:
+- rating: real score from G2/Capterra/Product Hunt/TrustRadius/Trustpilot
+- pricing: exactly "Free", "Freemium", or "Premium"
+- reason: personalized to user's use case${isShowMore ? '\n- NEVER repeat excluded tools. Suggest niche/newer alternatives.' : ''}
+- Only real, active tools with valid URLs`;
 }
 
 function buildComparePrompt(tools, userQuery, role = '') {
   const toolNames = tools.map(t => t.name).join(', ');
   let context = role ? `The user is a ${role}. ` : '';
 
-  return `You are an AI tool comparison expert. ${context}Compare these AI tools for the user's use case.
+  return `${context}Compare these AI tools for: "${userQuery}"
+Tools: ${toolNames}
 
-User's use case: "${userQuery}"
-Tools to compare: ${toolNames}
+Return JSON: {"comparison":[{"tool":"","pros":["","",""],"cons":["",""],"pricing":"Free/Freemium/Premium","verdict":""}],"winner":"","winnerReason":""}
 
-For each tool provide pros, cons, and a verdict. Then pick an overall winner.
-
-Respond with a JSON object in this exact format:
-{
-  "comparison": [
-    {
-      "tool": "Tool Name",
-      "pros": ["pro 1", "pro 2", "pro 3"],
-      "cons": ["con 1", "con 2"],
-      "pricing": "Free/Freemium/Premium",
-      "verdict": "One sentence summary of this tool"
-    }
-  ],
-  "winner": "Tool Name",
-  "winnerReason": "Why this tool is the best choice for the user's specific use case"
-}
-
-Important rules:
-- Include exactly ${tools.length} tools in the comparison array, in the same order given
-- Each tool must have 2-3 pros and 1-2 cons
-- The verdict must be personalized to the user's use case
-- The winner must be one of the compared tools`;
+Rules: exactly ${tools.length} tools in order, 2-3 pros, 1-2 cons each, verdict personalized to use case, winner must be one of the tools`;
 }
 
 function validateResponse(parsed) {
@@ -129,7 +74,7 @@ function validateResponse(parsed) {
   return { valid: true, tools, summary: parsed.summary || '' };
 }
 
-async function geminiCall(promptText) {
+async function geminiCall(promptText, maxTokens = 1024) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
 
@@ -142,7 +87,7 @@ async function geminiCall(promptText) {
       generationConfig: {
         response_mime_type: 'application/json',
         temperature: 0.7,
-        maxOutputTokens: 2048,
+        maxOutputTokens: maxTokens,
       },
     }),
   });
@@ -167,7 +112,7 @@ async function geminiCall(promptText) {
 
 export async function callGeminiAPI(userQuery, options = {}) {
   const prompt = buildPrompt(userQuery, options);
-  const parsed = await geminiCall(prompt);
+  const parsed = await geminiCall(prompt, 1024);
   const validated = validateResponse(parsed);
 
   if (!validated.valid) {
@@ -179,7 +124,7 @@ export async function callGeminiAPI(userQuery, options = {}) {
 
 export async function callGeminiCompareAPI(tools, userQuery, role = '') {
   const prompt = buildComparePrompt(tools, userQuery, role);
-  const parsed = await geminiCall(prompt);
+  const parsed = await geminiCall(prompt, 1024);
 
   if (!parsed || !Array.isArray(parsed.comparison)) {
     throw new Error('INVALID_RESPONSE');

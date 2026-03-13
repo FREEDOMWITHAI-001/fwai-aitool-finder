@@ -65,12 +65,6 @@ export default function TrendingPage({ onSearchQuery, onBack }) {
           <div key={category} className="trending-category-section">
             <div className="trending-category-header">
               <h3 className="trending-category-title">{category}</h3>
-              <button
-                className="trending-see-all"
-                onClick={() => onSearchQuery(`I need AI tools for ${category.toLowerCase()}`)}
-              >
-                See all →
-              </button>
             </div>
             <div className="trending-tools-grid">
               {topTools.map(tool => {

@@ -235,7 +235,6 @@ export default function App() {
       : localResults;
     setTools(alignedResults);
     setIsFallback(true);
-    setStatus('results');
 
     // Cache local results immediately
     saveResultsToCache(trimmed, localResults, initialSummary);
@@ -263,7 +262,10 @@ export default function App() {
             setIsFallback(false);
           }
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => setStatus('results'));
+    } else {
+      setStatus('results');
     }
 
     // Update search history immediately in UI, then persist
@@ -282,7 +284,7 @@ export default function App() {
   const handleChipClick = useCallback((label, chipQuery) => {
     setActiveChip(label);
     setQuery(chipQuery);
-    performSearch(chipQuery, { skipGemini: true });
+    performSearch(chipQuery);
   }, [performSearch]);
 
   const handleRetry = useCallback(() => {

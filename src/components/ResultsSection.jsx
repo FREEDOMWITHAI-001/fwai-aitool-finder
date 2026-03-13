@@ -27,7 +27,26 @@ export default function ResultsSection({
               {summary}
             </div>
           )}
-          <LoadingSkeleton />
+          {tools.length > 0 ? (
+            <>
+              <div className="divider" />
+              <div className="tool-list">
+                {tools.map((tool, index) => (
+                  <ToolCard
+                    key={`${tool.name}-${index}`}
+                    tool={tool}
+                    index={index}
+                    isBookmarked={bookmarkedNames?.has(tool.name)}
+                    onToggleBookmark={onToggleBookmark}
+                    isSelected={compareSelected?.some(t => t.name === tool.name)}
+                    onToggleCompare={onToggleCompare}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <LoadingSkeleton />
+          )}
         </>
       )}
 

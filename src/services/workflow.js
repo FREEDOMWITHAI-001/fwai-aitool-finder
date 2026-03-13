@@ -123,32 +123,26 @@ function buildWorkflow(goal, steps) {
 // ---- Gemini-powered workflow generation ----
 
 function buildWorkflowPrompt(goal) {
-  return `You are an expert AI workflow architect. A user wants to accomplish a goal, and you must break it into a step-by-step workflow where each step can be aided by AI tools.
+  return `Break this goal into 4-7 workflow steps. Goal: "${goal}"
 
-User's Goal: "${goal}"
+Each step needs: title, description (1-2 sentences, specific to goal), category (exactly one of: video, coding, design, writing, marketing, audio, research, automation).
 
-Break this goal into 4-7 logical workflow steps. For each step, assign exactly ONE category from this list: video, coding, design, writing, marketing, audio, research, automation.
-
-Respond with a JSON object in this exact format:
-{
-  "steps": [
-    {
-      "title": "Short step title",
-      "description": "1-2 sentence description of what this step involves",
-      "category": "one of: video, coding, design, writing, marketing, audio, research, automation"
-    }
-  ]
+Return JSON: {"steps":[{"title":"","description":"","category":""}]}
+Steps must be in logical order. No tool names.`;
 }
 
-Rules:
-- Order the steps logically (what comes first in a real workflow)
-- Each step must map to exactly one of the 8 categories
-- Descriptions should be specific to the user's goal, not generic
-- Use 4-7 steps (not more, not less)
-- Do NOT include tool names — just the steps and categories`;
-}
+// Client-side workflow cache — avoids repeat API calls for same goal
+const workflowCache = new Map();
+const WORKFLOW_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 export async function generateWorkflowWithGemini(goal) {
+  // Check cache first
+  const cacheKey = goal.trim().toLowerCase();
+  const cached = workflowCache.get(cacheKey);
+  if (cached && (Date.now() - cached.ts < WORKFLOW_CACHE_TTL)) {
+    return cached.data;
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
 
@@ -161,7 +155,7 @@ export async function generateWorkflowWithGemini(goal) {
       generationConfig: {
         response_mime_type: 'application/json',
         temperature: 0.7,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 768,
       },
     }),
   });
@@ -184,7 +178,9 @@ export async function generateWorkflowWithGemini(goal) {
 
   if (validSteps.length === 0) throw new Error('INVALID_RESPONSE');
 
-  return buildWorkflow(goal, validSteps);
+  const result = buildWorkflow(goal, validSteps);
+  workflowCache.set(cacheKey, { data: result, ts: Date.now() });
+  return result;
 }
 
 // ---- Main export: instant local + Gemini upgrade ----
