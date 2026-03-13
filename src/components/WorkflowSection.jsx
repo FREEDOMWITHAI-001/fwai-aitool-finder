@@ -68,26 +68,30 @@ export default function WorkflowSection({ credits, setCredits, user, bookmarkedN
   const columns = useGridColumns('tool-list');
 
   const handleSeeMore = useCallback((stepNumber, category, currentCount) => {
+    if (credits < 1) return;
+
     const newCount = currentCount + columns;
     const allTools = getToolsForCategory(category, newCount);
     // Ensure we only show complete rows
     const adjusted = allTools.slice(0, Math.floor(allTools.length / columns) * columns);
-    setStepToolCounts(prev => ({ ...prev, [stepNumber]: adjusted }));
-  }, [columns]);
+
+    // Only deduct if we actually got more tools
+    if (adjusted.length > currentCount) {
+      setStepToolCounts(prev => ({ ...prev, [stepNumber]: adjusted }));
+      setCredits(prev => Math.max(prev - 1, 0));
+      if (user?.uid) {
+        useCredit(user.uid, 1).then(serverBalance => {
+          if (typeof serverBalance === 'number') setCredits(serverBalance);
+        }).catch(() => {});
+      }
+    }
+  }, [columns, credits, user, setCredits]);
 
   const runWorkflow = useCallback(async (query) => {
     const trimmed = query.trim();
     if (!trimmed || trimmed.length < 3) return;
 
     if (credits < WORKFLOW_CREDIT_COST) return;
-
-    // Deduct 5 credits — update UI optimistically
-    setCredits(prev => prev - WORKFLOW_CREDIT_COST);
-    if (user?.uid) {
-      useCredit(user.uid, WORKFLOW_CREDIT_COST).then(serverBalance => {
-        if (typeof serverBalance === 'number') setCredits(serverBalance);
-      });
-    }
 
     setLoading(true);
     setWorkflow(null);
@@ -100,6 +104,14 @@ export default function WorkflowSection({ credits, setCredits, user, bookmarkedN
     const local = getLocalWorkflow(trimmed);
     setWorkflow(local);
     setLoading(false);
+
+    // Deduct 5 credits after workflow is successfully generated
+    setCredits(prev => Math.max(prev - WORKFLOW_CREDIT_COST, 0));
+    if (user?.uid) {
+      useCredit(user.uid, WORKFLOW_CREDIT_COST).then(serverBalance => {
+        if (typeof serverBalance === 'number') setCredits(serverBalance);
+      }).catch(() => {});
+    }
 
     // Try upgrading with Gemini in background
     try {
@@ -159,7 +171,7 @@ export default function WorkflowSection({ credits, setCredits, user, bookmarkedN
                   <polyline points="13 17 18 12 13 7" />
                   <polyline points="6 17 11 12 6 7" />
                 </svg>
-                Generate Workflow
+                Generate Workflow (5 credits)
               </>
             )}
           </button>
@@ -276,8 +288,9 @@ export default function WorkflowSection({ credits, setCredits, user, bookmarkedN
                       <button
                         className="workflow-see-more-btn"
                         onClick={() => handleSeeMore(step.number, step.category, displayTools.length)}
+                        disabled={credits < 1}
                       >
-                        See More {step.categoryLabel} Tools
+                        See More {step.categoryLabel} Tools (1 credit)
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="6 9 12 15 18 9" />
                         </svg>

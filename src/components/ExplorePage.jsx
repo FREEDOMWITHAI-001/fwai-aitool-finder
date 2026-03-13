@@ -1,15 +1,33 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import toolsData from '../data/tools.json';
 import { getFaviconUrl } from './ToolCard';
 
 const CATEGORIES = ['All', 'Video', 'Coding', 'Design', 'Writing', 'Marketing', 'Audio', 'Research', 'Automation'];
+const TRENDING_CATEGORIES = ['Video', 'Coding', 'Design', 'Writing', 'Marketing', 'Audio', 'Research', 'Automation'];
+const TRENDING_PER_CATEGORY = 12;
 
 export default function ExplorePage({ onSearchQuery, onBack }) {
   const [activeCategory, setActiveCategory] = useState('All');
 
+  // Collect all tool names shown in Trending (top-rated per category)
+  const trendingNames = useMemo(() => {
+    const names = new Set();
+    for (const cat of TRENDING_CATEGORIES) {
+      toolsData
+        .filter(t => t.primary === cat.toLowerCase())
+        .sort((a, b) => b.rating - a.rating)
+        .slice(0, TRENDING_PER_CATEGORY)
+        .forEach(t => names.add(t.name));
+    }
+    return names;
+  }, []);
+
+  // Exclude trending tools from Explore
+  const nonTrending = useMemo(() => toolsData.filter(t => !trendingNames.has(t.name)), [trendingNames]);
+
   const filtered = activeCategory === 'All'
-    ? toolsData
-    : toolsData.filter(t => t.categories.some(c => c.toLowerCase().includes(activeCategory.toLowerCase())));
+    ? nonTrending
+    : nonTrending.filter(t => t.categories.some(c => c.toLowerCase().includes(activeCategory.toLowerCase())));
 
   return (
     <div className="explore-page">

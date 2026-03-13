@@ -203,12 +203,6 @@ export default function App() {
 
     setTools([]);
 
-    // Deduct 1 credit — update UI optimistically, sync with Firebase
-    setCredits(prev => prev - 1);
-    useCredit(user.uid).then(serverBalance => {
-      if (typeof serverBalance === 'number') setCredits(serverBalance);
-    }).catch(() => {});
-
     const categorySummaries = {
       Video: 'These AI tools offer a powerful suite of capabilities for video creation and editing, from automated subtitle generation and visual effects to AI-driven scene composition and professional-grade post-production.',
       Coding: 'These AI tools offer a comprehensive suite of features to accelerate software development, from AI-powered code editing to advanced code generation and real-time assistance within existing IDEs.',
@@ -239,34 +233,37 @@ export default function App() {
     // Cache local results immediately
     saveResultsToCache(trimmed, localResults, initialSummary);
 
-    // Try upgrading to Gemini results in background (skip for category chip clicks)
-    if (!skipGemini) {
-      callGeminiAPI(trimmed, { role: userRole, ...filters })
-        .then(result => {
-          if (result.tools && result.tools.length > 0) {
-            setTools(prev => {
-              // Merge: Gemini results first, then fill with local results not in Gemini
-              const geminiNames = new Set(result.tools.map(t => t.name));
-              const extraLocal = prev.filter(t => !geminiNames.has(t.name));
-              const merged = [...result.tools, ...extraLocal];
-              // Trim to complete rows based on current grid columns
-              const cols = toolListColumns || 3;
-              const remainder = merged.length % cols;
-              const final = remainder !== 0 ? merged.slice(0, merged.length - remainder) : merged;
-              // Update cache with better results
-              const newSummary = result.summary || initialSummary;
-              saveResultsToCache(trimmed, final, newSummary);
-              return final;
-            });
-            setSummary(result.summary || '');
-            setIsFallback(false);
-          }
-        })
-        .catch(() => {})
-        .finally(() => setStatus('results'));
-    } else {
-      setStatus('results');
-    }
+    // Deduct 1 credit after local results are shown successfully
+    const deductOneCredit = () => {
+      setCredits(prev => Math.max(prev - 1, 0));
+      useCredit(user.uid).then(serverBalance => {
+        if (typeof serverBalance === 'number') setCredits(serverBalance);
+      }).catch(() => {});
+    };
+
+    deductOneCredit();
+
+    // Try upgrading to Gemini results in background
+    callGeminiAPI(trimmed, { role: userRole, ...filters })
+      .then(result => {
+        if (result.tools && result.tools.length > 0) {
+          setTools(prev => {
+            const geminiNames = new Set(result.tools.map(t => t.name));
+            const extraLocal = prev.filter(t => !geminiNames.has(t.name));
+            const merged = [...result.tools, ...extraLocal];
+            const cols = toolListColumns || 3;
+            const remainder = merged.length % cols;
+            const final = remainder !== 0 ? merged.slice(0, merged.length - remainder) : merged;
+            const newSummary = result.summary || initialSummary;
+            saveResultsToCache(trimmed, final, newSummary);
+            return final;
+          });
+          setSummary(result.summary || '');
+          setIsFallback(false);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setStatus('results'));
 
     // Update search history immediately in UI, then persist
     setSearchHistoryState(prev => {
@@ -307,18 +304,22 @@ export default function App() {
 
   // Show More
   const handleShowMore = useCallback(async () => {
-    if (!user || showMoreLoading || credits <= 0) return;
+    if (!user || showMoreLoading) return;
+    if (credits <= 0) {
+      setStatus('error');
+      setErrorType('credits_depleted');
+      return;
+    }
 
     setShowMoreLoading(true);
+    let addedTools = false;
     try {
       const excludeNames = tools.map(t => t.name);
       const existingNames = new Set(tools.map(t => t.name.toLowerCase()));
 
-      // Calculate how many tools needed to complete the next full row
       const cols = toolListColumns || 3;
       const currentTotal = tools.length;
       const remainder = currentTotal % cols;
-      // If partial row exists, fill it; otherwise fetch a full new row
       const fetchCount = remainder === 0 ? cols : cols - remainder;
       const { findMoreTools } = await import('./utils/fallback');
       const localMore = findMoreTools(query, excludeNames, fetchCount);
@@ -327,16 +328,11 @@ export default function App() {
       if (uniqueLocal.length > 0) {
         setTools(prev => {
           const updated = [...prev, ...uniqueLocal];
-          // Ensure total is always a multiple of columns
           const r = updated.length % cols;
           return r !== 0 ? updated.slice(0, updated.length - r) : updated;
         });
-        setCredits(prev => Math.max(prev - 1, 0));
-        useCredit(user.uid).then(serverBalance => {
-          if (typeof serverBalance === 'number') setCredits(serverBalance);
-        }).catch(() => {});
+        addedTools = true;
       } else {
-        // No more local tools, try Gemini for 2 more
         try {
           const result = await callGeminiAPI(query, {
             role: userRole,
@@ -350,14 +346,22 @@ export default function App() {
               const fresh = result.tools.filter(t => !shown.has(t.name.toLowerCase())).slice(0, fetchCount);
               if (fresh.length === 0) return prev;
               const updated = [...prev, ...fresh];
-              // Ensure total is always a multiple of columns
               const r = updated.length % cols;
               return r !== 0 ? updated.slice(0, updated.length - r) : updated;
             });
+            addedTools = true;
           }
         } catch {
           // Gemini failed — button stays visible for retry
         }
+      }
+
+      // Deduct 1 credit only after tools were successfully added
+      if (addedTools) {
+        setCredits(prev => Math.max(prev - 1, 0));
+        useCredit(user.uid).then(serverBalance => {
+          if (typeof serverBalance === 'number') setCredits(serverBalance);
+        }).catch(() => {});
       }
     } finally {
       setShowMoreLoading(false);
@@ -440,13 +444,20 @@ export default function App() {
   }
 
   const handleCompare = useCallback(async () => {
-    if (!user || compareSelected.length < 2 || compareLoading || credits <= 0) return;
+    if (!user || compareSelected.length < 2 || compareLoading) return;
+    if (credits <= 0) {
+      setStatus('error');
+      setErrorType('credits_depleted');
+      return;
+    }
 
     setCompareLoading(true);
 
     // Show local comparison instantly
     const localComparison = buildLocalComparison(compareSelected);
     setComparisonData(localComparison);
+
+    // Deduct 1 credit after comparison is shown
     setCredits(prev => Math.max(prev - 1, 0));
     useCredit(user.uid).then(serverBalance => {
       if (typeof serverBalance === 'number') setCredits(serverBalance);
