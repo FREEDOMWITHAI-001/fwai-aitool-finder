@@ -64,7 +64,7 @@ function ToolLogo({ url, name }) {
   );
 }
 
-export default function ToolCard({ tool, index, isBookmarked, onToggleBookmark, isSelected, onToggleCompare }) {
+export default function ToolCard({ tool, index, isBookmarked, onToggleBookmark, isSelected, onToggleCompare, onToolClick }) {
   const pricingClass = tool.pricing.toLowerCase();
 
   return (
@@ -93,6 +93,7 @@ export default function ToolCard({ tool, index, isBookmarked, onToggleBookmark, 
           className="open-tool-btn"
           target="_blank"
           rel="noopener noreferrer"
+          onClick={() => onToolClick?.(tool.name)}
         >
           Open Tool
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

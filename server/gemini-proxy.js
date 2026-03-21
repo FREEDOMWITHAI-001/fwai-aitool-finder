@@ -4,7 +4,7 @@ import { resolve } from 'path';
 import { createHash } from 'crypto';
 
 // Use Gemini 2.0 Flash — cheaper, no thinking tokens, sufficient for structured JSON tasks
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 let authClient = null;
 
@@ -25,7 +25,7 @@ function getAuthClient() {
 
 // Server-side response cache — avoids duplicate API calls for identical prompts
 const responseCache = new Map();
-const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const CACHE_TTL = 20 * 60 * 1000; // 20 minutes
 const MAX_CACHE_SIZE = 200;
 
 function getCacheKey(body) {

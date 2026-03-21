@@ -236,27 +236,39 @@ export async function saveSearchHistory(uid, queryText) {
 export async function getSearchHistory(uid) {
   const lk = `aitf_history_${uid}`;
   const stored = JSON.parse(localStorage.getItem(lk) || '[]');
+  const storedSorted = stored
+    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+    .map(e => e.query || e);
+
   try {
     const snap = await get(ref(rtdb, `users/${uid}/searchHistory`));
     if (!snap.exists()) {
-      return stored.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map(e => e.query || e);
+      return storedSorted;
     }
-    const fbEntries = Object.values(snap.val());
+    const snapVal = snap.val();
+    if (!snapVal || typeof snapVal !== 'object') return storedSorted;
+
+    const fbEntries = Object.values(snapVal).filter(e => e && e.query);
     const seen = new Set();
     const merged = [];
     for (const entry of [...fbEntries, ...stored]) {
       const q = entry.query || entry;
-      if (!seen.has(q)) {
+      if (q && !seen.has(q)) {
         seen.add(q);
         merged.push(typeof entry === 'string' ? { query: entry, timestamp: 0 } : entry);
       }
     }
     merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     const trimmed = merged.slice(0, MAX_HISTORY);
-    localStorage.setItem(lk, JSON.stringify(trimmed));
-    return trimmed.map(e => e.query || e);
+
+    // Only write back to localStorage if the merged result is non-empty,
+    // so a Firebase issue never destroys good local data.
+    if (trimmed.length > 0) {
+      localStorage.setItem(lk, JSON.stringify(trimmed));
+    }
+    return trimmed.length > 0 ? trimmed.map(e => e.query || e) : storedSorted;
   } catch {
-    return stored.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map(e => e.query || e);
+    return storedSorted;
   }
 }
 

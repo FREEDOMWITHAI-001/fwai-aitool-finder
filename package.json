@@ -21,7 +21,9 @@
   "homepage": "https://github.com/FREEDOMWITHAI-001/fwai-aitool-finder#readme",
   "dependencies": {
     "firebase": "^12.10.0",
+    "firebase-admin": "^13.7.0",
     "google-auth-library": "^10.6.1",
+    "google-trends-api": "^4.9.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

@@ -1,7 +1,7 @@
 // Gemini calls go through the server-side proxy (service account auth)
 const GEMINI_PROXY = '/api/ai';
 
-function buildPrompt(userQuery, { role = '', budget = '', teamSize = '', excludeTools = [] } = {}) {
+function buildPrompt(userQuery, { role = '', budget = '', teamSize = '', excludeTools = [], count = 4 } = {}) {
   let context = '';
   if (role) context += `The user is a ${role}. `;
   if (budget && budget !== 'Any price') context += `Budget preference: ${budget}. `;
@@ -15,16 +15,19 @@ function buildPrompt(userQuery, { role = '', budget = '', teamSize = '', exclude
 
   const currentDate = new Date().toISOString().split('T')[0];
 
-  return `You are an AI tool expert (${currentDate}). Recommend ${isShowMore ? '3-5' : 'exactly 3'} CURRENT, best-in-market AI tools for the user's use case. Prioritize newer tools over legacy ones.
+  return `You are an AI tool expert (${currentDate}). Recommend ${isShowMore ? '3-5' : `exactly ${count}`} CURRENT, most-relevant AI tools for the user's exact use case. Rank by: (1) relevance to the specific query intent, (2) current popularity/trending on Google Trends and social media, (3) real user rating.
 
 ${context}Use case: "${userQuery}"${excludeClause}
 
 Return JSON: {"tools":[{"name":"","url":"","rating":4.8,"ratingSource":"G2","pricing":"Freemium","reason":"","bestFor":""}],"summary":""}
 
 Rules:
+- CRITICAL: Match the SPECIFIC intent precisely. "video editing" = tools for cutting/trimming/editing existing footage (CapCut, Descript, Filmora), NOT video generation. "video generation/creation" = text-to-video tools (Runway, Sora, Pika). "image generation" = DALL-E, Midjourney, Stable Diffusion. "writing" = Jasper, Copy.ai, Grammarly. Never mix subcategories.
+- Sort results by RELEVANCE to the query first, then by current trending popularity.
 - rating: real score from G2/Capterra/Product Hunt/TrustRadius/Trustpilot
 - pricing: exactly "Free", "Freemium", or "Premium"
-- reason: personalized to user's use case${isShowMore ? '\n- NEVER repeat excluded tools. Suggest niche/newer alternatives.' : ''}
+- reason: MAX 10 words. Short tagline, NOT a paragraph. Example: "Best for quick social media video editing"
+- bestFor: MAX 8 words. Example: "AI-powered video editing for social media"${isShowMore ? '\n- NEVER repeat excluded tools. Suggest niche/newer alternatives.' : ''}
 - Only real, active tools with valid URLs`;
 }
 
@@ -47,7 +50,7 @@ function validateResponse(parsed) {
 
   const validPricing = ['Free', 'Freemium', 'Premium'];
 
-  const tools = parsed.tools.slice(0, 5).map(tool => {
+  const tools = parsed.tools.slice(0, 8).map(tool => {
     let pricing = tool.pricing || 'Freemium';
     if (!validPricing.includes(pricing)) {
       const lower = pricing.toLowerCase();
@@ -60,14 +63,20 @@ function validateResponse(parsed) {
     rating = Math.max(0, Math.min(5, rating));
     rating = Math.round(rating * 10) / 10;
 
+    // Truncate verbose fields to keep cards uniform
+    let reason = tool.reason || '';
+    if (reason.length > 60) reason = reason.slice(0, 57) + '...';
+    let bestFor = tool.bestFor || '';
+    if (bestFor.length > 50) bestFor = bestFor.slice(0, 47) + '...';
+
     return {
       name: tool.name || 'Unknown Tool',
       url: tool.url || '#',
       rating,
       ratingSource: tool.ratingSource || '',
       pricing,
-      reason: tool.reason || '',
-      bestFor: tool.bestFor || '',
+      reason,
+      bestFor,
     };
   });
 
@@ -88,6 +97,7 @@ async function geminiCall(promptText, maxTokens = 1024) {
         response_mime_type: 'application/json',
         temperature: 0.7,
         maxOutputTokens: maxTokens,
+        thinkingConfig: { thinkingBudget: 0 },
       },
     }),
   });
@@ -131,4 +141,56 @@ export async function callGeminiCompareAPI(tools, userQuery, role = '') {
   }
 
   return parsed;
+}
+
+// Session cache for trending tools — avoids re-fetching on every page visit
+let _trendingCache = null;
+let _trendingCachedAt = 0;
+const TRENDING_TTL = 30 * 60 * 1000; // 30 min
+
+export async function callGeminiTrendingTools(categories, countPerCategory = 6) {
+  if (_trendingCache && Date.now() - _trendingCachedAt < TRENDING_TTL) {
+    return _trendingCache;
+  }
+
+  const currentDate = new Date().toISOString().split('T')[0];
+  const prompt = `You are an AI tool expert (${currentDate}). List the top ${countPerCategory} currently trending AI tools for each category below.
+
+Categories: ${categories.join(', ')}
+
+Return JSON with each category name as a key:
+{"Video":[{"name":"","url":"","pricing":"Freemium","rating":4.5,"bestFor":""}],"Coding":[...],...}
+
+Rules:
+- Include ALL ${categories.length} categories as keys
+- pricing: exactly "Free", "Freemium", or "Premium"
+- rating: real score 3.0–5.0
+- bestFor: MAX 8 words
+- Only real, active tools with valid URLs
+- Sort by current popularity/trending within each category`;
+
+  const parsed = await geminiCall(prompt, 2048);
+
+  const validPricing = ['Free', 'Freemium', 'Premium'];
+  const result = {};
+
+  for (const cat of categories) {
+    const raw = parsed[cat];
+    if (!Array.isArray(raw)) { result[cat] = []; continue; }
+    result[cat] = raw.slice(0, countPerCategory).map((t, index) => {
+      if (!t.name || !t.url) return null;
+      let pricing = t.pricing || 'Freemium';
+      if (!validPricing.includes(pricing)) pricing = 'Freemium';
+      let rating = parseFloat(t.rating) || 4.5;
+      rating = Math.max(0, Math.min(5, Math.round(rating * 10) / 10));
+      const bestFor = (t.bestFor || '').slice(0, 50);
+      // Preserve Gemini's popularity ordering as trendScore (rank 0 = most trending = highest score)
+      const trendScore = (countPerCategory - index) * 10;
+      return { name: t.name, url: t.url, pricing, rating, bestFor, trendScore };
+    }).filter(Boolean);
+  }
+
+  _trendingCache = result;
+  _trendingCachedAt = Date.now();
+  return result;
 }

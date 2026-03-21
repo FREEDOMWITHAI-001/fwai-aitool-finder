@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import toolsData from '../data/tools.json';
 import { getFaviconUrl } from './ToolCard';
+import { getCachedTrendingScores } from '../services/trendingEngine';
 
 const CATEGORIES = ['All', 'Video', 'Coding', 'Design', 'Writing', 'Marketing', 'Audio', 'Research', 'Automation'];
 const TRENDING_CATEGORIES = ['Video', 'Coding', 'Design', 'Writing', 'Marketing', 'Audio', 'Research', 'Automation'];
@@ -8,19 +9,32 @@ const TRENDING_PER_CATEGORY = 12;
 
 export default function ExplorePage({ onSearchQuery, onBack }) {
   const [activeCategory, setActiveCategory] = useState('All');
+  const [dynamicScores, setDynamicScores] = useState(null);
 
-  // Collect all tool names shown in Trending (top-rated per category)
+  useEffect(() => {
+    getCachedTrendingScores().then(cached => {
+      if (cached?.scores) setDynamicScores(cached.scores);
+    }).catch(() => {});
+  }, []);
+
+  // Collect all tool names shown in Trending (top trending per category)
   const trendingNames = useMemo(() => {
     const names = new Set();
     for (const cat of TRENDING_CATEGORIES) {
       toolsData
         .filter(t => t.primary === cat.toLowerCase())
-        .sort((a, b) => b.rating - a.rating)
+        .sort((a, b) => {
+          const aScore = dynamicScores?.[a.name] ?? a.trendScore ?? 0;
+          const bScore = dynamicScores?.[b.name] ?? b.trendScore ?? 0;
+          const trendDiff = bScore - aScore;
+          if (trendDiff !== 0) return trendDiff;
+          return b.rating - a.rating;
+        })
         .slice(0, TRENDING_PER_CATEGORY)
         .forEach(t => names.add(t.name));
     }
     return names;
-  }, []);
+  }, [dynamicScores]);
 
   // Exclude trending tools from Explore
   const nonTrending = useMemo(() => toolsData.filter(t => !trendingNames.has(t.name)), [trendingNames]);

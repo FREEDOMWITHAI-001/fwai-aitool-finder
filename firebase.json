@@ -20,5 +20,13 @@
         ]
       }
     ]
-  }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "trending-refresh",
+      "ignore": ["node_modules", ".git"],
+      "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run lint || true"]
+    }
+  ]
 }

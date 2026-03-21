@@ -1,5 +1,27 @@
 import tools from '../data/tools.json';
 
+// Match Gemini-returned tool names against local DB, overlay real trendScore/rating
+function enrichWorkflowTools(geminiTools) {
+  const localMap = new Map(tools.map(t => [t.name.toLowerCase(), t]));
+  return geminiTools.map(gt => {
+    const local = localMap.get(gt.name.toLowerCase());
+    if (!local) return { ...gt, trendScore: gt.trendScore || 30 };
+    return {
+      ...gt,
+      trendScore: local.trendScore ?? gt.trendScore ?? 50,
+      rating: local.rating || gt.rating,
+      pricing: local.pricing || gt.pricing,
+      bestFor: gt.bestFor || local.bestFor,
+      categories: local.categories,
+      primary: local.primary,
+    };
+  }).sort((a, b) => {
+    const trendDiff = (b.trendScore || 0) - (a.trendScore || 0);
+    if (trendDiff !== 0) return trendDiff;
+    return (b.rating || 0) - (a.rating || 0);
+  });
+}
+
 // ---- Local workflow templates for instant results ----
 
 const WORKFLOW_TEMPLATES = {
@@ -90,11 +112,15 @@ function matchTemplate(goal) {
   return null;
 }
 
-// Get top tools for a category
+// Get top tools for a category — sorted by trendScore DESC then rating DESC
 export function getToolsForCategory(category, count = 2) {
   return tools
     .filter(t => t.primary === category)
-    .sort((a, b) => b.rating - a.rating)
+    .sort((a, b) => {
+      const trendDiff = (b.trendScore || 0) - (a.trendScore || 0);
+      if (trendDiff !== 0) return trendDiff;
+      return b.rating - a.rating;
+    })
     .slice(0, count)
     .map(t => ({
       name: t.name,
@@ -102,6 +128,11 @@ export function getToolsForCategory(category, count = 2) {
       rating: t.rating,
       pricing: t.pricing,
       bestFor: t.bestFor,
+      trendScore: t.trendScore || 50,
+      categories: t.categories,
+      primary: t.primary,
+      reason: `Top-rated for ${t.bestFor.toLowerCase()}.`.slice(0, 60),
+      ratingSource: 'Community',
     }));
 }
 
@@ -123,12 +154,20 @@ function buildWorkflow(goal, steps) {
 // ---- Gemini-powered workflow generation ----
 
 function buildWorkflowPrompt(goal) {
-  return `Break this goal into 4-7 workflow steps. Goal: "${goal}"
+  return `You are a workflow and AI tool expert. Break "${goal}" into 4-7 actionable steps and recommend 2-3 real AI tools per step.
 
-Each step needs: title, description (1-2 sentences, specific to goal), category (exactly one of: video, coding, design, writing, marketing, audio, research, automation).
+Return JSON: {"goal":"","steps":[{"title":"","description":"","category":"","tools":[{"name":"","url":"","pricing":"Freemium","rating":4.5,"bestFor":""}]}]}
 
-Return JSON: {"steps":[{"title":"","description":"","category":""}]}
-Steps must be in logical order. No tool names.`;
+Category options (pick exactly one per step): video, coding, design, writing, marketing, audio, research, automation
+
+Rules:
+- Steps in logical execution order, specific to the goal
+- description: 1-2 sentences, actionable and specific
+- tools: best CURRENT AI tools for that exact step (not just category)
+- pricing: exactly "Free", "Freemium", or "Premium"
+- rating: real score 3.0–5.0
+- bestFor: MAX 8 words
+- Only real tools with valid URLs`;
 }
 
 // Client-side workflow cache — avoids repeat API calls for same goal
@@ -136,7 +175,6 @@ const workflowCache = new Map();
 const WORKFLOW_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 export async function generateWorkflowWithGemini(goal) {
-  // Check cache first
   const cacheKey = goal.trim().toLowerCase();
   const cached = workflowCache.get(cacheKey);
   if (cached && (Date.now() - cached.ts < WORKFLOW_CACHE_TTL)) {
@@ -144,7 +182,7 @@ export async function generateWorkflowWithGemini(goal) {
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), 20000);
 
   const response = await fetch('/api/ai', {
     method: 'POST',
@@ -155,7 +193,8 @@ export async function generateWorkflowWithGemini(goal) {
       generationConfig: {
         response_mime_type: 'application/json',
         temperature: 0.7,
-        maxOutputTokens: 768,
+        maxOutputTokens: 2048,
+        thinkingConfig: { thinkingBudget: 0 },
       },
     }),
   });
@@ -172,13 +211,49 @@ export async function generateWorkflowWithGemini(goal) {
   if (!parsed.steps || !Array.isArray(parsed.steps)) throw new Error('INVALID_RESPONSE');
 
   const validCategories = ['video', 'coding', 'design', 'writing', 'marketing', 'audio', 'research', 'automation'];
+  const validPricing = ['Free', 'Freemium', 'Premium'];
+
   const validSteps = parsed.steps
     .filter(s => s.title && s.category && validCategories.includes(s.category))
     .slice(0, 7);
 
   if (validSteps.length === 0) throw new Error('INVALID_RESPONSE');
 
-  const result = buildWorkflow(goal, validSteps);
+  const result = {
+    goal: parsed.goal || goal,
+    steps: validSteps.map((step, i) => {
+      // Normalize Gemini-provided tools for this step
+      const geminiTools = Array.isArray(step.tools)
+        ? step.tools.filter(t => t.name && t.url).slice(0, 3).map(t => {
+            let pricing = t.pricing || 'Freemium';
+            if (!validPricing.includes(pricing)) pricing = 'Freemium';
+            let rating = parseFloat(t.rating) || 4.5;
+            rating = Math.max(3, Math.min(5, Math.round(rating * 10) / 10));
+            return {
+              name: t.name,
+              url: t.url,
+              pricing,
+              rating,
+              bestFor: (t.bestFor || '').slice(0, 50),
+              reason: '',
+              ratingSource: '',
+            };
+          })
+        : [];
+
+      return {
+        number: i + 1,
+        title: step.title,
+        description: step.description,
+        category: step.category,
+        categoryLabel: step.category.charAt(0).toUpperCase() + step.category.slice(1),
+        // Enrich Gemini tools with local trendScore data; fall back to static if none
+        tools: geminiTools.length > 0 ? enrichWorkflowTools(geminiTools) : getToolsForCategory(step.category),
+        isGemini: geminiTools.length > 0,
+      };
+    }),
+  };
+
   workflowCache.set(cacheKey, { data: result, ts: Date.now() });
   return result;
 }
